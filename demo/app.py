@@ -1,14 +1,12 @@
-import streamlit as st
+import sys
 from pathlib import Path
+from datetime import datetime
+import streamlit as st
 import pandas as pd
 import numpy as np
 import cv2
-from datetime import datetime
 
-import sys
-from pathlib import Path
-
-# Ensure project root is on PYTHONPATH for Streamlit
+# Ensure project root is on path for Streamlit
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -18,63 +16,113 @@ from src.tasks.extract_dynamics import run as extract_dynamics
 
 st.set_page_config(page_title="Foam Stability Copilot", layout="wide")
 st.title("🫧 Foam Stability Copilot")
-st.caption("Select BD/HD XLSX → generate synthetic microscopy frames → extract bubble dynamics → stability forecast")
+st.caption("BD/HD XLSX → synthetic microscopy frames → bubble dynamics → stability forecast")
 
 DATA_SHEETS = Path("data/sheets")
-DATA_SYNTH = Path("data/synth")
-DATA_SHEETS.mkdir(parents=True, exist_ok=True)
-DATA_SYNTH.mkdir(parents=True, exist_ok=True)
+DATA_SYNTH  = Path("data/synth")
+DATA_UPLOAD = Path("data/uploads")
+for p in [DATA_SHEETS, DATA_SYNTH, DATA_UPLOAD]:
+    p.mkdir(parents=True, exist_ok=True)
 
-def list_xlsx():
-    return sorted(DATA_SHEETS.glob("*.xlsx"))
+def list_xlsx(folder: Path):
+    return sorted(folder.glob("*.xlsx"))
+
+def list_runs():
+    return sorted([p for p in DATA_SYNTH.iterdir() if p.is_dir()], key=lambda p: p.name) if DATA_SYNTH.exists() else []
 
 def read_img(p: Path):
     return cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
 
-# ---------- Sidebar: Select sheets ----------
+def save_uploaded_xlsx(upload, target_dir: Path):
+    """Save Streamlit UploadedFile to disk and return path."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    out = target_dir / upload.name
+    out.write_bytes(upload.getbuffer())
+    return out
+
+# ---------------- Sidebar: Input Source ----------------
+st.sidebar.header("0) Input source")
+input_source = st.sidebar.radio(
+    "Choose input method",
+    ["Option A: Pick from data/sheets", "Option B: Upload BD/HD XLSX"],
+    horizontal=False
+)
+
+# ---------------- Sidebar: Select BD/HD ----------------
 st.sidebar.header("1) Select datasheets (.xlsx)")
-xlsx = list_xlsx()
-if not xlsx:
-    st.sidebar.error("No XLSX found in data/sheets/. Copy your sheets there first.")
-    st.stop()
 
-bd_candidates = [p for p in xlsx if "BD" in p.name.upper()] or xlsx
-hd_candidates = [p for p in xlsx if "HD" in p.name.upper()] or xlsx
+bd_path = None
+hd_path = None
 
-bd_path = Path(st.sidebar.selectbox("Pick BD (Structure)", [str(p) for p in bd_candidates]))
-hd_path = Path(st.sidebar.selectbox("Pick HD (Height/Volume)", [str(p) for p in hd_candidates]))
+if input_source.startswith("Option A"):
+    xlsx = list_xlsx(DATA_SHEETS)
+    if not xlsx:
+        st.sidebar.error("No XLSX found in data/sheets/. Copy your sheets there first.")
+        st.stop()
 
+    bd_candidates = [p for p in xlsx if "BD" in p.name.upper()] or xlsx
+    hd_candidates = [p for p in xlsx if "HD" in p.name.upper()] or xlsx
+
+    bd_path = Path(st.sidebar.selectbox("Pick BD (Structure)", [str(p) for p in bd_candidates]))
+    hd_path = Path(st.sidebar.selectbox("Pick HD (Height/Volume)", [str(p) for p in hd_candidates]))
+
+else:
+    st.sidebar.caption("Upload exactly 2 files: BD.xlsx (Structure) + HD.xlsx (Height/Volume)")
+    bd_up = st.sidebar.file_uploader("Upload BD (Structure) .xlsx", type=["xlsx"], key="bd_up")
+    hd_up = st.sidebar.file_uploader("Upload HD (Height/Volume) .xlsx", type=["xlsx"], key="hd_up")
+
+    if bd_up is not None:
+        bd_path = save_uploaded_xlsx(bd_up, DATA_UPLOAD)
+    if hd_up is not None:
+        hd_path = save_uploaded_xlsx(hd_up, DATA_UPLOAD)
+
+    st.sidebar.caption(f"Uploads saved under: {DATA_UPLOAD}/")
+
+# ---------------- Sidebar: Generate Run ----------------
 st.sidebar.header("2) Generate run")
-run_name = st.sidebar.text_input("Run name", value=f"{bd_path.stem.replace(' ','_')}_{datetime.now().strftime('%H%M%S')}")
+default_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+if bd_path is not None:
+    # nicer default run name based on file stem
+    default_name = f"{bd_path.stem.replace(' ','_')}_{datetime.now().strftime('%H%M%S')}"
+
+run_name = st.sidebar.text_input("Run name", value=default_name)
 nframes = st.sidebar.number_input("Frames (0 = ALL)", min_value=0, max_value=5000, value=0, step=10)
 
 out_dir = DATA_SYNTH / run_name
 
 if st.sidebar.button("🚀 Generate frames + extract dynamics", type="primary"):
-    with st.spinner("Generating synthetic microscopy frames..."):
-        half_life = generate_sequence(
-            bd_xlsx=str(bd_path),
-            hd_xlsx=str(hd_path),
-            out_dir=str(out_dir),
-            n_frames=int(nframes),
-            seed=7
-        )
-    with st.spinner("Extracting bubble dynamics + overlays..."):
-        extract_dynamics(folder=str(out_dir), out_overlays=str(out_dir / "overlays"))
+    if bd_path is None or hd_path is None:
+        st.sidebar.error("Please provide BOTH BD.xlsx and HD.xlsx.")
+    else:
+        with st.spinner("Generating synthetic microscopy frames..."):
+            half_life = generate_sequence(
+                bd_xlsx=str(bd_path),
+                hd_xlsx=str(hd_path),
+                out_dir=str(out_dir),
+                n_frames=int(nframes),
+                seed=7
+            )
+        with st.spinner("Extracting bubble dynamics + overlays..."):
+            extract_dynamics(folder=str(out_dir), out_overlays=str(out_dir / "overlays"))
 
-    st.success(f"Done ✅  Half-life: {half_life:.2f}s  Run: {out_dir}")
-    st.session_state["run_dir"] = str(out_dir)
+        hl_txt = f"{half_life:.2f}s" if half_life is not None else "N/A"
+        st.success(f"Done ✅ Half-life: {hl_txt} • Run: {out_dir}")
+        st.session_state["run_dir"] = str(out_dir)
+        st.rerun()
 
-# ---------- Sidebar: Select existing run ----------
+# ---------------- Sidebar: Explore Run ----------------
 st.sidebar.header("3) Explore run")
-runs = sorted([p for p in DATA_SYNTH.iterdir() if p.is_dir()], key=lambda p: p.name) if DATA_SYNTH.exists() else []
+runs = list_runs()
 if not runs:
-    st.sidebar.info("No runs yet. Generate one above.")
+    st.sidebar.info("No runs found in data/synth yet. Generate one above.")
     st.stop()
 
 default_run = st.session_state.get("run_dir", str(runs[-1]))
-run_dir = Path(st.sidebar.selectbox("Select run folder", [str(r) for r in runs], index=[str(r) for r in runs].index(default_run) if default_run in [str(r) for r in runs] else len(runs)-1))
+run_strs = [str(r) for r in runs]
+idx = run_strs.index(default_run) if default_run in run_strs else len(runs) - 1
+run_dir = Path(st.sidebar.selectbox("Select run folder", run_strs, index=idx))
 
+# ---------------- Load Data ----------------
 frames_dir = run_dir
 overlays_dir = run_dir / "overlays"
 dyn_csv = run_dir / "bubble_dynamics.csv"
@@ -95,6 +143,7 @@ if meta_csv.exists():
     except Exception:
         pass
 
+# ---------------- Controls ----------------
 tmin, tmax = float(df["t_s"].min()), float(df["t_s"].max())
 t = st.sidebar.slider("Time (s)", min_value=tmin, max_value=tmax, value=tmin, step=5.0)
 row = df.iloc[(df["t_s"] - t).abs().argsort()[:1]].iloc[0]
@@ -111,7 +160,7 @@ if img is not None:
     x = img.astype(np.float32)
     x = (x - x.min()) / (x.max() - x.min() + 1e-8)
 
-# ---------- KPIs ----------
+# ---------------- KPIs ----------------
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Run", run_dir.name)
 k2.metric("Time (s)", f"{t_selected:.0f}")
@@ -121,7 +170,7 @@ k4.metric("Mean radius (px)", f"{row['r_mean']:.2f}")
 if half_life is not None:
     st.info(f"⏱️ Foam half-life (from HD sheet): **{half_life:.2f} s**")
 
-# ---------- Main ----------
+# ---------------- Main Panels ----------------
 c1, c2 = st.columns([1.15, 1])
 
 with c1:
@@ -139,7 +188,7 @@ with c2:
     st.caption("Variability & shape stability")
     st.line_chart(chart_df.set_index("t_s")[["r_std", "circ_mean"]])
 
-# ---------- Forecast ----------
+# ---------------- Forecast ----------------
 st.subheader("Stability Forecast (Lite)")
 ts = df["t_s"].values.astype(float)
 rs = df["r_mean"].values.astype(float)
@@ -158,7 +207,15 @@ s1.metric("Coarsening rate (Δr/Δt)", f"{coarsening_rate:.5f} px/s")
 s2.metric("Stability Score", f"{score:.1f} / 100")
 s3.metric("Half-life label", f"{half_life:.2f} s" if half_life is not None else "N/A")
 
-# ---------- Export ----------
+with st.expander("Explainability (Lite)"):
+    st.write(
+        "- Faster growth of mean bubble radius → faster coarsening → lower stability.\n"
+        "- Rising radius std → widening distribution → instability.\n"
+        "- Lower circularity → deformation/merging → instability.\n"
+        "Next: train a lightweight regressor across runs (GO vs NGO) to predict half-life."
+    )
+
+# ---------------- Export ----------------
 st.subheader("Export")
 colA, colB = st.columns(2)
 with colA:
