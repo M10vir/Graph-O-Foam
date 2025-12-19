@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="./assets/flowchart.png" width="650" alt="Graph-O-Foam Banner">
-</p>
-
 <h1 align="center">Graph‑O‑Foam: ActiveScan Copilot (Lite)</h1>
 <h3 align="center">XLSX → Frames → Bubble Dynamics → Stability → Comparison</h3>
 
@@ -11,27 +7,29 @@
 
 <p align="center">
 
-<!-- Python -->
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
+  <!-- Python -->
+  <img src="https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white" />
 
-<!-- Streamlit -->
-![Streamlit](https://img.shields.io/badge/Streamlit-Framework-FF4B4B?logo=streamlit&logoColor=white)
+  <!-- Streamlit -->
+  <img src="https://img.shields.io/badge/Streamlit-Framework-FF4B4B?logo=streamlit&logoColor=white" />
 
-<!-- Pandas -->
-![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas&logoColor=white)
+  <!-- Pandas -->
+  <img src="https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas&logoColor=white" />
 
-<!-- OpenPyXL -->
-![OpenPyXL](https://img.shields.io/badge/OpenPyXL-Excel%20Integration-1F6E43?logo=microsoft-excel&logoColor=white)
+  <!-- OpenPyXL -->
+  <img src="https://img.shields.io/badge/OpenPyXL-Excel%20Integration-1F6E43?logo=microsoft-excel&logoColor=white" />
 
-<!-- NumPy -->
-![NumPy](https://img.shields.io/badge/NumPy-Numerical%20Computing-013243?logo=numpy&logoColor=white)
+  <!-- NumPy -->
+  <img src="https://img.shields.io/badge/NumPy-Numerical%20Computing-013243?logo=numpy&logoColor=white" />
 
-<!-- OpenCV -->
-![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?logo=opencv&logoColor=white)
+  <!-- OpenCV -->
+  <img src="https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?logo=opencv&logoColor=white" />
 
-<!-- Git/GitHub -->
-![Git](https://img.shields.io/badge/Git-Version%20Control-F05032?logo=git&logoColor=white)
-![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?logo=github&logoColor=white)
+  <!-- Git -->
+  <img src="https://img.shields.io/badge/Git-Version%20Control-F05032?logo=git&logoColor=white" />
+
+  <!-- GitHub -->
+  <img src="https://img.shields.io/badge/GitHub-Repo-181717?logo=github&logoColor=white" />
 
 </p>
 
