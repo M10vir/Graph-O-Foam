@@ -2,9 +2,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+
 def load_sheet(xlsx_path: str):
     # reads first sheet by default
     return pd.read_excel(xlsx_path)
+
 
 def _pick_col(df: pd.DataFrame, candidates: list[str], contains_any: list[str] | None = None):
     # 1) exact matches first
@@ -28,6 +30,7 @@ def _pick_col(df: pd.DataFrame, candidates: list[str], contains_any: list[str] |
                 return df.columns[i]
 
     return None
+
 
 def _half_life_observed(t: np.ndarray, v: np.ndarray) -> float | None:
     """
@@ -55,6 +58,7 @@ def _half_life_observed(t: np.ndarray, v: np.ndarray) -> float | None:
 
     frac = (target - v1) / (v2 - v1)
     return float(t1 + frac * (t2 - t1))
+
 
 def _half_life_extrapolated(t: np.ndarray, v: np.ndarray) -> float | None:
     """
@@ -96,6 +100,7 @@ def _half_life_extrapolated(t: np.ndarray, v: np.ndarray) -> float | None:
 
     return float(t_half)
 
+
 def foam_half_life_seconds(df_hd: pd.DataFrame, extrapolate: bool = True):
     """
     Returns:
@@ -104,10 +109,11 @@ def foam_half_life_seconds(df_hd: pd.DataFrame, extrapolate: bool = True):
       extrapolated_s: float | None
       method: "observed" | "extrapolated" | "not_reached" | "missing"
     """
-    # Prefer your original expected names first
     t_candidates = ["t [s]", "t[s]", "time", "time_s", "Time", "Time (s)", "t"]
-    v_candidates = ["Vfoam [mL]", "Vfoam", "foam_volume", "Foam Volume", "volume", "V", "V [mL]",
-                    "hfoam [mm]", "Hfoam [mm]", "Hfoam", "height", "H", "H [mm]"]
+    v_candidates = [
+        "Vfoam [mL]", "Vfoam", "foam_volume", "Foam Volume", "volume", "V", "V [mL]",
+        "hfoam [mm]", "Hfoam [mm]", "Hfoam", "height", "H", "H [mm]"
+    ]
 
     tcol = _pick_col(df_hd, t_candidates, contains_any=["t"])
     vcol = _pick_col(df_hd, v_candidates, contains_any=["foam"])
@@ -145,6 +151,7 @@ def foam_half_life_seconds(df_hd: pd.DataFrame, extrapolate: bool = True):
 
     return None, None, None, "not_reached"
 
+
 def sample_radii_from_area(mean_area, std_area, n, rng):
     mean_area = max(float(mean_area), 1e-6)
     std_area = max(float(std_area), 1e-6)
@@ -154,6 +161,7 @@ def sample_radii_from_area(mean_area, std_area, n, rng):
     areas = rng.lognormal(mean=mu, sigma=sigma, size=int(n))
     r_um = np.sqrt(areas / np.pi)
     return r_um
+
 
 def place_circles(canvas_px, radii_px, rng, max_tries=20000):
     H, W = canvas_px
@@ -177,6 +185,7 @@ def place_circles(canvas_px, radii_px, rng, max_tries=20000):
             break
     return centers
 
+
 def render_frame(centers, canvas_px=(512, 512), noise=0.06, blur=1):
     import cv2
     H, W = canvas_px
@@ -195,6 +204,7 @@ def render_frame(centers, canvas_px=(512, 512), noise=0.06, blur=1):
 
     img = np.clip(img + np.random.normal(0, noise, size=img.shape).astype(np.float32), 0, 1)
     return (img * 255).astype(np.uint8)
+
 
 def generate_sequence(bd_xlsx, hd_xlsx, out_dir, n_frames=40, seed=7, extrapolate_half_life=True):
     import cv2
@@ -274,10 +284,14 @@ def generate_sequence(bd_xlsx, hd_xlsx, out_dir, n_frames=40, seed=7, extrapolat
         })
 
     pd.DataFrame(rows).to_csv(out_dir / "frames_metadata.csv", index=False)
-    return half_best, hl_method
+
+    # ✅ BACKWARD COMPAT: return only the numeric half-life (float/None)
+    return half_best
+
 
 if __name__ == "__main__":
     import argparse
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--bd", required=True, help="BD.xlsx path")
     ap.add_argument("--hd", required=True, help="HD.xlsx path")
@@ -286,9 +300,19 @@ if __name__ == "__main__":
     ap.add_argument("--no-extrapolate", action="store_true", help="Disable half-life extrapolation")
     args = ap.parse_args()
 
-    hl, method = generate_sequence(
+    hl = generate_sequence(
         args.bd, args.hd, args.out, args.nframes,
         extrapolate_half_life=(not args.no_extrapolate)
     )
+
+    method = "unknown"
+    try:
+        meta = pd.read_csv(Path(args.out) / "frames_metadata.csv")
+        if "half_life_method" in meta.columns and len(meta) > 0:
+            method = str(meta["half_life_method"].iloc[0])
+    except Exception:
+        pass
+
     print("✅ Generated synthetic frames in:", args.out)
     print("Foam half-life (s):", hl, "| method:", method)
+ 
