@@ -225,3 +225,101 @@ with colB:
         st.download_button("Download frames_metadata.csv", data=meta_csv.read_bytes(), file_name="frames_metadata.csv", mime="text/csv")
     else:
         st.write("frames_metadata.csv not found")
+
+# =========================
+# Compare two runs (GO vs NGO / any 2 conditions)
+# =========================
+st.divider()
+st.header("🔁 Compare Two Runs (GO vs NGO / Condition A vs B)")
+
+runs_all = list_runs()
+run_paths = [Path(r) for r in runs_all]
+run_names = [r.name for r in run_paths]
+
+def load_dynamics(run_path: Path) -> pd.DataFrame:
+    p = run_path / "bubble_dynamics.csv"
+    if not p.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(p).dropna(subset=["t_s"]).sort_values("t_s")
+    return df
+
+def compute_coarsening_rate(df: pd.DataFrame) -> float:
+    if df.empty or "t_s" not in df.columns or "r_mean" not in df.columns:
+        return float("nan")
+    x = df["t_s"].astype(float).values
+    y = df["r_mean"].astype(float).values
+    m = np.isfinite(x) & np.isfinite(y)
+    if m.sum() < 3:
+        return float("nan")
+    slope = float(np.polyfit(x[m], y[m], 1)[0])  # px/s
+    return slope
+
+def stability_score_from_rate(rate: float) -> float:
+    if not np.isfinite(rate):
+        return float("nan")
+    score = float(100 * np.exp(-abs(rate) * 15))
+    return max(0.0, min(100.0, score))
+
+if len(run_names) < 2:
+    st.info("Generate at least 2 runs to enable comparison.")
+else:
+    cA, cB = st.columns(2)
+
+    with cA:
+        runA_name = st.selectbox("Run A", run_names, index=max(0, len(run_names) - 2))
+    with cB:
+        runB_name = st.selectbox("Run B", run_names, index=len(run_names) - 1)
+
+    runA = DATA_SYNTH / runA_name
+    runB = DATA_SYNTH / runB_name
+
+    dfA = load_dynamics(runA)
+    dfB = load_dynamics(runB)
+
+    if dfA.empty or dfB.empty:
+        st.warning("One of the selected runs is missing bubble_dynamics.csv. Please extract dynamics for both runs.")
+    else:
+        rateA = compute_coarsening_rate(dfA)
+        rateB = compute_coarsening_rate(dfB)
+        scoreA = stability_score_from_rate(rateA)
+        scoreB = stability_score_from_rate(rateB)
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Run A coarsening (Δr/Δt)", "N/A" if not np.isfinite(rateA) else f"{rateA:.5f} px/s")
+        m2.metric("Run A stability score", "N/A" if not np.isfinite(scoreA) else f"{scoreA:.1f}/100")
+        m3.metric("Run B coarsening (Δr/Δt)", "N/A" if not np.isfinite(rateB) else f"{rateB:.5f} px/s")
+        m4.metric("Run B stability score", "N/A" if not np.isfinite(scoreB) else f"{scoreB:.1f}/100")
+
+        # Winner label
+        winner = None
+        if np.isfinite(scoreA) and np.isfinite(scoreB):
+            winner = "Run A" if scoreA > scoreB else ("Run B" if scoreB > scoreA else "Tie")
+        if winner:
+            st.success(f"🏁 More stable (Lite): **{winner}**")
+
+        # Align on time for clean plotting
+        plotA = dfA[["t_s", "n", "r_mean", "circ_mean"]].copy()
+        plotB = dfB[["t_s", "n", "r_mean", "circ_mean"]].copy()
+        plotA = plotA.rename(columns={"n": "A_n", "r_mean": "A_r_mean", "circ_mean": "A_circ"})
+        plotB = plotB.rename(columns={"n": "B_n", "r_mean": "B_r_mean", "circ_mean": "B_circ"})
+
+        merged = pd.merge(plotA, plotB, on="t_s", how="outer").sort_values("t_s")
+
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            st.subheader("Bubble Count N(t)")
+            st.line_chart(merged.set_index("t_s")[["A_n", "B_n"]])
+        with p2:
+            st.subheader("Mean Radius r_mean(t)")
+            st.line_chart(merged.set_index("t_s")[["A_r_mean", "B_r_mean"]])
+        with p3:
+            st.subheader("Circularity (shape stability)")
+            st.line_chart(merged.set_index("t_s")[["A_circ", "B_circ"]])
+
+        with st.expander("Explainability"):
+            st.write(
+                "- Lower coarsening rate (slower increase in mean radius) generally indicates higher stability.\n"
+                "- Falling circularity may indicate deformation/merging.\n"
+                "- Use this panel to compare GO vs NGO (or any two formulations) directly."
+            )
+
