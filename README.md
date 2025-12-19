@@ -54,10 +54,7 @@ Graph-O-Foam/
   WRITEUP.md
 
 ## Demo flowchart
-
-<p align="center">
-  <img src="assets/flowchart.png" alt="Workflow" style="max-width: 100%;">
-</p>
+![Workflow](assets/flowchart.png)
 
 ## Quickstart
 ### 1) Setup
