@@ -1,4 +1,3 @@
-```md
 # Graph-O-Foam: ActiveScan Copilot (Lite)
 Microscopy Hackathon 2025 (AISCIA Use Case)  
 From XLSX datasheets → microscopy-like frames → bubble dynamics → stability forecast + GO vs NGO comparison
@@ -100,7 +99,7 @@ Each run creates a folder like `data/synth/<run_name>/` containing:
 
 ---
 
-## Compare Two Runs (viral feature)
+## Compare Two Runs 
 
 Generate and extract dynamics for at least two runs, then scroll to:
 
