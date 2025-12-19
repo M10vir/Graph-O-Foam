@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/flowchart.png" width="650" alt="Graph-O-Foam Banner">
+  <img src="./assets/flowchart.png" width="650" alt="Graph-O-Foam Banner">
 </p>
 
 <h1 align="center">Graph‑O‑Foam: ActiveScan Copilot (Lite)</h1>
@@ -93,101 +93,7 @@ Open: `http://localhost:8501`
 
 ---
 
-## Using the dashboard
-
-### Option A — Select BD/HD from a folder (recommended for many sheets)
-
-1. Put your XLSX files under a local folder (example): `data/sheets/`
-2. In the dashboard sidebar: choose Option A, then select your BD and HD
-3. Click Generate / Run
-
-### Option B — Upload BD/HD in the dashboard (demo-friendly)
-
-1. In the dashboard sidebar: choose Option B
-2. Upload BD.xlsx and HD.xlsx
-3. Click Generate / Run
-
----
-
-## Outputs (per run)
-
-Each run creates a folder like `data/synth/<run_name>/` containing:
-
-* `frame_*.png` — synthetic microscopy-like frames
-* `overlays/` — verification overlays (segmentation/contours)
-* `bubble_dynamics.csv` — extracted dynamics (N, r_mean, r_std, circularity vs time)
-* `frames_metadata.csv` — run metadata including stability fields
-
----
-
-## Compare Two Runs 
-
-Generate and extract dynamics for at least two runs, then scroll to:
-
-🔁 Compare Two Runs (GO vs NGO / Condition A vs B)
-
-You’ll see:
-
-* coarsening rate (Δr/Δt)
-* stability score (Lite)
-* aligned plots: N(t), r_mean(t), circularity(t)
-* automatic “More stable” label
-
----
-
-## CLI (optional)
-
-If you want to run steps manually:
-
-### Generate frames
-
-```bash
-PYTHONPATH=. python src/synth/generate_frames.py \
-  --bd "path/to/BD.xlsx" \
-  --hd "path/to/HD.xlsx" \
-  --out data/synth/run1 \
-  --nframes 40
-```
-
-### Extract dynamics
-
-```bash
-PYTHONPATH=. python src/tasks/extract_dynamics.py --folder data/synth/run1
-```
-
----
-
-## Troubleshooting
-
-### “ModuleNotFoundError: No module named 'src'”
-
-Run Streamlit with:
-
-```bash
-PYTHONPATH=. streamlit run demo/app.py
-```
-
-### Half-life shows N/A / not reached
-
-That’s expected if HD never crosses the 50% threshold within the measurement window. We intentionally report this honestly as not reached within window.
-
----
-
-## Submission Deliverables
-
-* ✅ Code: GitHub repo (this repository)
-* ✅ Write-up: `WRITEUP.md`
-* ✅ Demo video: 2-minute screen recording (dashboard walkthrough)
-
-### 2-minute demo checklist
-
-1. Launch Streamlit
-2. Generate Run A (BD+HD) → Extract dynamics
-3. Generate Run B (BD+HD) → Extract dynamics
-4. Show Compare Two Runs (scores + winner label + plots)
-5. End with takeaway: “XLSX → frames → dynamics → stability + comparison”
-
----
+## Follow-up Deliverables -> `WRITEUP.md`
 
 ## Tools / Frameworks
 
@@ -197,9 +103,11 @@ Python 3.11, Streamlit, Pandas, OpenPyXL, NumPy, OpenCV (cv2), Git/GitHub.
 
 ## License
 
-MIT (or update as needed)
+MIT
 
-```
-::contentReference[oaicite:0]{index=0}
-```
+## Acknowledgments
 
+- Thanks to entire TheChangeMakers team - "Atrerix"
+- Inspired by Possibilities
+
+[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)]()
