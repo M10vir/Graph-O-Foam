@@ -108,7 +108,7 @@ Open: `http://localhost:8501`
 
 ---
 
-## Follow-up Deliverables -> `WRITEUP.md`
+## Follow-up Deliverables → `WRITEUP.md`
 
 ## Tools / Frameworks
 
@@ -124,5 +124,6 @@ MIT
 
 - Thanks to entire TheChangeMakers team - "Atrerix"
 - Inspired by Possibilities
+
 
 [![Version](https://img.shields.io/badge/version-1.0.0-green.svg)]()
