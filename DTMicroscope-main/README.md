@@ -1,2 +1,0 @@
-# DTMicroscope
-Digital Twin Microscope
