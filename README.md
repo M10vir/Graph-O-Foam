@@ -54,7 +54,7 @@ Graph-O-Foam/
 ```
 
 ## Demo flowchart
-![Workflow](assets/flowchart.png)
+![Workflow](./assets/flowchart.png)
 
 ## Quickstart
 ### 1) Setup
