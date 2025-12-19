@@ -88,8 +88,32 @@ Graph-O-Foam/
   WRITEUP.md
 ```
 
-## Demo flowchart
-![Workflow](./assets/flowchart.png)
+flowchart TD
+    A[Start] --> B{Input method?}
+    B --> C1[Option A: Select BD.xlsx + HD.xlsx from local folder]
+    B --> C2[Option B: Upload BD.xlsx + HD.xlsx via Streamlit dashboard]
+    C1 --> D[Load XLSX (pandas + openpyxl)]
+    C2 --> D
+    D --> E[Synthetic microscopy frame generator (from BD)]
+    E --> F{Stability target from HD}
+    F --> F1[Half-life if 50% reached]
+    F --> F2[Not reached within window]
+    F --> G[Sample bubble radii from BD stats]
+    G --> H[Place bubbles on canvas (non-overlap packing)]
+    H --> I[Render microscopy-like frames (noise + blur)]
+    I --> J[Outputs: frame_*.png + frames_metadata.csv]
+    J --> K[Bubble dynamics extraction (OpenCV)]
+    K --> L[Threshold + morphology]
+    L --> M[Contours → bubble metrics]
+    M --> N[Outputs: bubble_dynamics.csv + overlays/]
+    N --> O[Lite stability forecast]
+    O --> P[Coarsening rate = slope of r_mean(t)]
+    P --> Q[Stability score (0–100)]
+    Q --> R[Streamlit dashboard]
+    R --> R1[Frames + overlays viewer]
+    R --> R2[Plots: N(t), r_mean(t), circularity(t)]
+    R --> R3[Compare Run A vs Run B]
+    R3 --> R4[Winner label: More stable]
 
 ## Quickstart
 ### 1) Setup
