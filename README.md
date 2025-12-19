@@ -91,30 +91,30 @@ Graph-O-Foam/
 ```mermaid
 flowchart TD
     A[Start] --> B{Input method?}
-    B --> C1[Option A: Select BD.xlsx + HD.xlsx from local folder]
-    B --> C2[Option B: Upload BD.xlsx + HD.xlsx via Streamlit dashboard]
+    B --> C1[Option A: Select BD.xlsx and HD.xlsx from local folder]
+    B --> C2[Option B: Upload BD.xlsx and HD.xlsx via Streamlit dashboard]
     C1 --> D[Load XLSX using pandas and openpyxl]
     C2 --> D
     D --> E[Synthetic microscopy frame generator from BD]
     E --> F[Stability target from HD]
-    F --> F1[Half-life if 50% reached]
+    F --> F1[Half-life if 50 percent reached]
     F --> F2[Not reached within window]
     F --> G[Sample bubble radii from BD stats]
     G --> H[Place bubbles on canvas - non-overlap packing]
     H --> I[Render microscopy-like frames with noise and blur]
-    I --> J[Outputs: frame_*.png and frames_metadata.csv]
+    I --> J[Outputs: frame images and frames metadata]
     J --> K[Bubble dynamics extraction using OpenCV]
     K --> L[Threshold and morphology]
     L --> M[Contours and bubble metrics]
-    M --> N[Outputs: bubble_dynamics.csv and overlays]
+    M --> N[Outputs: bubble dynamics and overlays]
     N --> O[Lite stability forecast]
-    O --> P[Coarsening rate = slope of r_mean over time]
+    O --> P[Coarsening rate - slope of r_mean over time]
     P --> Q[Stability score from 0 to 100]
     Q --> R[Streamlit dashboard]
     R --> R1[Frames and overlays viewer]
-    R --> R2[Plots: N(t), r_mean(t), circularity(t)]
-    R --> R3[Compare Run A vs Run B]
-    R3 --> R4[Winner label: More stable]
+    R --> R2[Plots of N over time, r_mean, circularity]
+    R --> R3[Compare Run A versus Run B]
+    R3 --> R4[Winner label - More stable]
 ```
 
 ## Quickstart
