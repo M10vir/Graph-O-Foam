@@ -1,3 +1,23 @@
+<p align="center">
+  <img src="assets/flowchart.png" width="650" alt="Graph-O-Foam Banner">
+</p>
+
+<h1 align="center">Graph‑O‑Foam: ActiveScan Copilot (Lite)</h1>
+<h3 align="center">XLSX → Frames → Bubble Dynamics → Stability → Comparison</h3>
+
+<p align="center">
+  Microscopy Hackathon 2025 — AISCIA Use Case
+</p>
+
+<p align="center">
+
+  <img src="https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+  <img src="https://img.shields.io/github/stars/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME?style=for-the-badge" />
+  <img src="https://img.shields.io/github/forks/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME?style=for-the-badge" />
+
+</p>
+
 # Graph-O-Foam: ActiveScan Copilot (Lite)
 Microscopy Hackathon 2025 (AISCIA Use Case)  
 From XLSX datasheets → microscopy-like frames → bubble dynamics → stability forecast + GO vs NGO comparison
