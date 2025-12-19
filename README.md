@@ -88,6 +88,7 @@ Graph-O-Foam/
   WRITEUP.md
 ```
 
+```mermaid
 flowchart TD
     A[Start] --> B{Input method?}
     B --> C1[Option A: Select BD.xlsx + HD.xlsx from local folder]
@@ -114,6 +115,7 @@ flowchart TD
     R --> R2[Plots: N(t), r_mean(t), circularity(t)]
     R --> R3[Compare Run A vs Run B]
     R3 --> R4[Winner label: More stable]
+```
 
 ## Quickstart
 ### 1) Setup
