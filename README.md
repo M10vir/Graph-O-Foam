@@ -57,7 +57,9 @@ Graph-O-Foam/
 
 ## Demo flowchart
 
-![Workflow](assets/flowchart.png)
+<p align="center">
+  <img src="assets/flowchart.png" alt="Workflow" style="max-width: 100%;">
+</p>
 
 ## Quickstart
 ### 1) Setup
