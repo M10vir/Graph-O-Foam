@@ -37,7 +37,7 @@ Graph-O-Foam builds a reproducible pipeline that:
 - auto-label: “More stable”
 
 ## Repo structure
-```text
+```
 Graph-O-Foam/
   demo/                  # Streamlit app (demo/app.py)
   src/
@@ -51,6 +51,7 @@ Graph-O-Foam/
   requirements.txt
   README.md
   WRITEUP.md
+```
 
 ## Demo flowchart
 ![Workflow](assets/flowchart.png)
