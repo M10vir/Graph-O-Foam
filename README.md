@@ -40,32 +40,24 @@ Graph-O-Foam builds a reproducible pipeline that:
 ---
 
 ## Repo structure
-```
-
+```text
 Graph-O-Foam/
-demo/                  # Streamlit app
-app.py
-src/
-synth/               # XLSX → synthetic frame generator
-generate_frames.py
-tasks/               # frame analysis (bubble dynamics extraction)
-extract_dynamics.py
-data/
-uploads/             # Option B uploads (local only; gitignored)
-sheets/              # Option A local sheets folder (local only; gitignored)
-synth/               # generated runs (local only; gitignored)
-requirements.txt
-README.md
-WRITEUP.md
-
-```
----
+  demo/                  # Streamlit app (demo/app.py)
+  src/
+    synth/               # XLSX → synthetic frame generator (generate_frames.py)
+    tasks/               # Bubble dynamics extraction (extract_dynamics.py)
+  data/
+    uploads/             # Option B uploads (local only; gitignored)
+    sheets/              # Option A local sheets (local only; gitignored)
+    synth/               # Generated runs (local only; gitignored)
+  assets/                # README images (tracked)
+  requirements.txt
+  README.md
+  WRITEUP.md
 
 ## Demo flowchart
 
 ![Workflow](assets/flowchart.png)
-
----
 
 ## Quickstart
 ### 1) Setup
