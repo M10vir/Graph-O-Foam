@@ -11,10 +11,27 @@
 
 <p align="center">
 
-  <img src="https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
-  <img src="https://img.shields.io/github/stars/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME?style=for-the-badge" />
-  <img src="https://img.shields.io/github/forks/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME?style=for-the-badge" />
+<!-- Python -->
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
+
+<!-- Streamlit -->
+![Streamlit](https://img.shields.io/badge/Streamlit-Framework-FF4B4B?logo=streamlit&logoColor=white)
+
+<!-- Pandas -->
+![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas&logoColor=white)
+
+<!-- OpenPyXL -->
+![OpenPyXL](https://img.shields.io/badge/OpenPyXL-Excel%20Integration-1F6E43?logo=microsoft-excel&logoColor=white)
+
+<!-- NumPy -->
+![NumPy](https://img.shields.io/badge/NumPy-Numerical%20Computing-013243?logo=numpy&logoColor=white)
+
+<!-- OpenCV -->
+![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?logo=opencv&logoColor=white)
+
+<!-- Git/GitHub -->
+![Git](https://img.shields.io/badge/Git-Version%20Control-F05032?logo=git&logoColor=white)
+![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?logo=github&logoColor=white)
 
 </p>
 
