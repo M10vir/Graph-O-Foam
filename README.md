@@ -37,8 +37,6 @@ Graph-O-Foam builds a reproducible pipeline that:
 - shows coarsening rate, stability score, trend plots
 - auto-label: “More stable”
 
----
-
 ## Repo structure
 ```text
 Graph-O-Foam/
@@ -67,7 +65,6 @@ Graph-O-Foam/
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-````
 
 ### 2) Launch the dashboard
 
