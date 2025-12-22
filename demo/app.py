@@ -58,7 +58,8 @@ def ensure_graph_metrics(run_path: Path) -> bool:
 def show_graph_panel(run_path: Path, header: str = "🕸️ Bubble Neighbor Graph (Digital Twin)"):
     graph_csv = run_path / "graph_metrics.csv"
     if not graph_csv.exists():
-        st.info(f"Graph metrics not found for **{run_path.name}**. Run: PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_path}")
+        st.info(f"Graph metrics not found for **{run_path.name}**.")
+        st.code(f"PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_path}", language="bash")
         return
 
     gdf = pd.read_csv(graph_csv)
@@ -482,5 +483,33 @@ else:
                 st.caption("Graph density")
                 st.line_chart(gmerged.set_index("t_s")[["A_density", "B_density"]])
 
+
+            # Summary + verdict (graph twin)
+            A_avg_deg = float(gdfA["avg_degree"].mean()) if "avg_degree" in gdfA.columns else float("nan")
+            B_avg_deg = float(gdfB["avg_degree"].mean()) if "avg_degree" in gdfB.columns else float("nan")
+            A_giant = float(gdfA["giant_component_ratio"].mean()) if "giant_component_ratio" in gdfA.columns else float("nan")
+            B_giant = float(gdfB["giant_component_ratio"].mean()) if "giant_component_ratio" in gdfB.columns else float("nan")
+            A_density = float(gdfA["density"].mean()) if "density" in gdfA.columns else float("nan")
+            B_density = float(gdfB["density"].mean()) if "density" in gdfB.columns else float("nan")
+
+            # 0–100 graph stability score: connectivity (giant component) + neighborhood degree
+            denom_deg = float(np.nanmax([A_avg_deg, B_avg_deg, 1e-6]))
+            A_graph_score = 100.0 * (0.7 * A_giant + 0.3 * (A_avg_deg / denom_deg)) if np.isfinite(A_giant) and np.isfinite(A_avg_deg) else float("nan")
+            B_graph_score = 100.0 * (0.7 * B_giant + 0.3 * (B_avg_deg / denom_deg)) if np.isfinite(B_giant) and np.isfinite(B_avg_deg) else float("nan")
+
+            mg1, mg2, mg3, mg4 = st.columns(4)
+            mg1.metric("Graph score A", "N/A" if not np.isfinite(A_graph_score) else f"{A_graph_score:.1f}/100")
+            mg2.metric("Graph score B", "N/A" if not np.isfinite(B_graph_score) else f"{B_graph_score:.1f}/100")
+            mg3.metric("Avg degree (A vs B)", "N/A" if not np.isfinite(A_avg_deg) else f"{A_avg_deg:.2f}", None if not np.isfinite(A_avg_deg) or not np.isfinite(B_avg_deg) else f"{A_avg_deg - B_avg_deg:+.2f}")
+            mg4.metric("Giant comp % (A vs B)", "N/A" if not np.isfinite(A_giant) else f"{A_giant*100:.1f}%", None if not np.isfinite(A_giant) or not np.isfinite(B_giant) else f"{(A_giant - B_giant)*100:+.1f}%")
+
+            # Combined verdict: Lite (coarsening) + Graph twin
+            if np.isfinite(scoreA) and np.isfinite(scoreB) and np.isfinite(A_graph_score) and np.isfinite(B_graph_score):
+                combinedA = 0.6 * scoreA + 0.4 * A_graph_score
+                combinedB = 0.6 * scoreB + 0.4 * B_graph_score
+                st.success(f"🏁 Final verdict (Lite+Graph): **Run A**" if combinedA > combinedB else (f"🏁 Final verdict (Lite+Graph): **Run B**" if combinedB > combinedA else "🏁 Final verdict (Lite+Graph): **Tie**"))
+                st.caption(f"Combined scores → A: {combinedA:.1f}/100 | B: {combinedB:.1f}/100")
+
             st.caption("Interpretation: higher connectivity / lower fragmentation often indicates slower coarsening (more stable foam).")
+ 
  
