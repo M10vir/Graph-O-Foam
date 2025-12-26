@@ -10,3 +10,5 @@ data/**
 *.xlsx
 *.png
 *.orig
+models/
+data/ml/
