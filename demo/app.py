@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 import os
 import subprocess
+import re
 
 # Ensure project root is on path for Streamlit
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +42,34 @@ def save_uploaded_xlsx(upload, target_dir: Path):
     out = target_dir / upload.name
     out.write_bytes(upload.getbuffer())
     return out
+
+
+
+def sanitize_run_name(name: str, max_len: int = 80) -> str:
+    """Sanitize run folder names (especially for Option B uploads).
+
+    Removes [ ] (ffmpeg glob hazard), strips weird characters, normalizes whitespace,
+    and keeps a readable safe slug for folder creation.
+    """
+    # Keep what the user typed, but remove bracket characters explicitly
+    s = str(name).replace("[", "").replace("]", "")
+
+    # Replace anything risky with underscore
+    s = re.sub(r"[^A-Za-z0-9._ -]+", "_", s)
+
+    # Normalize spaces/underscores
+    s = re.sub(r"\s+", "_", s).strip("_")
+    s = re.sub(r"_+", "_", s)
+
+    if not s:
+        s = "run"
+
+    if len(s) > max_len:
+        s = s[:max_len].rstrip("_")
+
+    return s
+
+
 
 
 def run_cli(cmd: list[str], title: str = "Running...") -> bool:
@@ -125,7 +154,13 @@ if bd_path is not None:
     # nicer default run name based on file stem
     default_name = f"{bd_path.stem.replace(' ','_')}_{datetime.now().strftime('%H%M%S')}"
 
-run_name = st.sidebar.text_input("Run name", value=default_name)
+run_name_raw = st.sidebar.text_input("Run name", value=default_name)
+run_name = run_name_raw
+if input_source.startswith("Option B"):
+    sanitized = sanitize_run_name(run_name_raw)
+    if sanitized != run_name_raw:
+        st.sidebar.info(f"Sanitized run folder name: {sanitized}")
+    run_name = sanitized
 nframes = st.sidebar.number_input("Frames (0 = ALL)", min_value=0, max_value=5000, value=0, step=10)
 
 out_dir = DATA_SYNTH / run_name
