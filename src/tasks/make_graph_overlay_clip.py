@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -17,11 +17,10 @@ def ffmpeg_path() -> str:
     raise SystemExit("ffmpeg not found. Install with: brew install ffmpeg")
 
 
-def run_cmd(cmd: list[str]):
+def run_cmd(cmd: list[str]) -> None:
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        # Print the real ffmpeg error
         raise SystemExit(
             "ffmpeg failed.\n"
             f"Command: {' '.join(cmd)}\n\n"
@@ -29,13 +28,31 @@ def run_cmd(cmd: list[str]):
         )
 
 
-def make_mp4_glob(overlay_dir: Path, out_mp4: Path, fps: int = 10, width: int = 1280):
+def escape_for_ffmpeg_glob(path: str) -> str:
+    """
+    ffmpeg -pattern_type glob treats [] and {} specially.
+    Escape them so folders like 'suspension[69]' work.
+    """
+    return (
+        path.replace("\\", "\\\\")
+            .replace("[", r"\[")
+            .replace("]", r"\]")
+            .replace("{", r"\{")
+            .replace("}", r"\}")
+    )
+
+
+def make_mp4_glob(overlay_dir: Path, out_mp4: Path, fps: int = 10, width: int = 1280) -> None:
     ff = ffmpeg_path()
+
+    # IMPORTANT: escape glob-special chars in directory path
+    pattern = escape_for_ffmpeg_glob(str((overlay_dir.resolve() / "*.png")))
+
     cmd = [
         ff, "-y",
         "-framerate", str(fps),
         "-pattern_type", "glob",
-        "-i", str(overlay_dir / "*.png"),
+        "-i", pattern,
         "-vf", f"scale={width}:-2:flags=lanczos,format=yuv420p",
         "-c:v", "libx264",
         "-crf", "20",
@@ -46,8 +63,10 @@ def make_mp4_glob(overlay_dir: Path, out_mp4: Path, fps: int = 10, width: int = 
     run_cmd(cmd)
 
 
-def make_gif_glob(overlay_dir: Path, out_gif: Path, fps: int = 10, width: int = 900):
+def make_gif_glob(overlay_dir: Path, out_gif: Path, fps: int = 10, width: int = 900) -> None:
     ff = ffmpeg_path()
+
+    pattern = escape_for_ffmpeg_glob(str((overlay_dir.resolve() / "*.png")))
     palette = out_gif.with_suffix(".palette.png")
 
     # palette
@@ -55,7 +74,7 @@ def make_gif_glob(overlay_dir: Path, out_gif: Path, fps: int = 10, width: int = 
         ff, "-y",
         "-framerate", str(fps),
         "-pattern_type", "glob",
-        "-i", str(overlay_dir / "*.png"),
+        "-i", pattern,
         "-vf", f"fps={fps},scale={width}:-2:flags=lanczos:force_original_aspect_ratio=decrease,palettegen",
         str(palette),
     ]
@@ -66,9 +85,10 @@ def make_gif_glob(overlay_dir: Path, out_gif: Path, fps: int = 10, width: int = 
         ff, "-y",
         "-framerate", str(fps),
         "-pattern_type", "glob",
-        "-i", str(overlay_dir / "*.png"),
+        "-i", pattern,
         "-i", str(palette),
-        "-lavfi", f"fps={fps},scale={width}:-2:flags=lanczos:force_original_aspect_ratio=decrease[x];[x][1:v]paletteuse",
+        "-lavfi",
+        f"fps={fps},scale={width}:-2:flags=lanczos:force_original_aspect_ratio=decrease[x];[x][1:v]paletteuse",
         str(out_gif),
     ]
     run_cmd(cmd_gif)
@@ -77,7 +97,7 @@ def make_gif_glob(overlay_dir: Path, out_gif: Path, fps: int = 10, width: int = 
         palette.unlink()
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--folder", required=True, help="Run folder, e.g. data/synth/test_upload")
     ap.add_argument("--overlay-dir", default="graph_overlays", help="Subfolder name (default: graph_overlays)")

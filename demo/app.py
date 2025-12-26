@@ -16,79 +16,6 @@ if str(ROOT) not in sys.path:
 from src.synth.generate_frames import generate_sequence
 from src.tasks.extract_dynamics import run as extract_dynamics
 
-
-def _run_cli(cmd: list[str], title: str = "Running..."):
-    """Run a CLI command from Streamlit, showing output if it fails."""
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT)
-    try:
-        subprocess.run(cmd, check=True, env=env)
-        return True, ""
-    except subprocess.CalledProcessError as e:
-        return False, f"{title} failed (exit={e.returncode})."
-
-
-def ensure_dynamics(run_path: Path) -> bool:
-    """Ensure bubble_dynamics.csv exists for a run (Phase-1 artifact)."""
-    dyn_csv = run_path / "bubble_dynamics.csv"
-    if dyn_csv.exists():
-        return True
-    # Try to extract from frames produced in Phase-1
-    frames = sorted(run_path.glob("frame_*.png"))
-    if not frames:
-        return False
-    extract_dynamics(folder=str(run_path), out_overlays=str(run_path / "overlays"))
-    return dyn_csv.exists()
-
-
-def ensure_graph_metrics(run_path: Path) -> bool:
-    """Ensure graph_metrics.csv exists for a run (Phase-2 artifact from Phase-1 outputs)."""
-    graph_csv = run_path / "graph_metrics.csv"
-    if graph_csv.exists():
-        return True
-    # Must have Phase-1 frames
-    frames = sorted(run_path.glob("frame_*.png"))
-    if not frames:
-        return False
-    cmd = [sys.executable, str(ROOT / "src" / "tasks" / "extract_graph_metrics.py"), "--folder", str(run_path)]
-    ok, msg = _run_cli(cmd, title="Graph metrics extraction")
-    return ok and graph_csv.exists()
-
-
-def show_graph_panel(run_path: Path, header: str = "🕸️ Bubble Neighbor Graph (Digital Twin)"):
-    graph_csv = run_path / "graph_metrics.csv"
-    if not graph_csv.exists():
-        st.info(f"Graph metrics not found for **{run_path.name}**.")
-        st.code(f"PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_path}", language="bash")
-        return
-
-    gdf = pd.read_csv(graph_csv)
-    st.subheader(header)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("Avg degree", f"{gdf['avg_degree'].mean():.2f}" if "avg_degree" in gdf.columns else "N/A")
-    with c2:
-        if "giant_component_ratio" in gdf.columns:
-            st.metric("Giant component", f"{(100*gdf['giant_component_ratio'].mean()):.1f}%")
-        else:
-            st.metric("Giant component", "N/A")
-    with c3:
-        st.metric("Graph density", f"{gdf['density'].mean():.4f}" if "density" in gdf.columns else "N/A")
-
-    if "t_s" in gdf.columns:
-        plot_cols = [c for c in ["avg_degree", "giant_component_ratio"] if c in gdf.columns]
-        if plot_cols:
-            st.line_chart(gdf.dropna(subset=["t_s"]).set_index("t_s")[plot_cols])
-
-    overlay_dir = run_path / "graph_overlays"
-    if overlay_dir.exists():
-        frames = sorted([p.name for p in overlay_dir.glob("frame_*.png")])
-        if frames:
-            pick = st.select_slider("Graph overlay frame", options=frames, value=frames[0], key=f"graph_pick_{run_path.name}")
-            st.image(str(overlay_dir / pick), caption=f"Graph overlay: {pick}", use_container_width=True)
-
-
 st.set_page_config(page_title="Foam Stability Copilot", layout="wide")
 st.title("🫧 Foam Stability Copilot")
 st.caption("BD/HD XLSX → synthetic microscopy frames → bubble dynamics → stability forecast")
@@ -114,6 +41,44 @@ def save_uploaded_xlsx(upload, target_dir: Path):
     out = target_dir / upload.name
     out.write_bytes(upload.getbuffer())
     return out
+
+
+def run_cli(cmd: list[str], title: str = "Running...") -> bool:
+    """Run a CLI command with PYTHONPATH set to project root; show stdout/stderr on failure."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT)
+    try:
+        subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        st.error(f"{title} failed (exit={e.returncode}).")
+        if e.stdout:
+            st.code(e.stdout, language="text")
+        if e.stderr:
+            st.code(e.stderr, language="text")
+        return False
+
+def ensure_graph_metrics_and_clip(run_path: Path, fps: int = 10) -> None:
+    """Phase-2 automation: extract graph metrics/overlays, then (optionally) build an MP4/GIF clip."""
+    # 1) Graph metrics + overlays
+    graph_csv = run_path / "graph_metrics.csv"
+    if not graph_csv.exists():
+        cmd = [sys.executable, str(ROOT / "src" / "tasks" / "extract_graph_metrics.py"), "--folder", str(run_path)]
+        run_cli(cmd, title="Graph metrics extraction")
+
+    # 2) Graph overlay clip (optional; requires ffmpeg + helper script)
+    clip_mp4 = run_path / "graph_overlays.mp4"
+    overlay_dir = run_path / "graph_overlays"
+    clip_script = ROOT / "src" / "tasks" / "make_graph_overlay_clip.py"
+    if clip_mp4.exists():
+        return
+    if not overlay_dir.exists():
+        return
+    if not clip_script.exists():
+        # Script not added yet; UI will still show frames
+        return
+    cmd2 = [sys.executable, str(clip_script), "--folder", str(run_path), "--fps", str(int(fps))]
+    run_cli(cmd2, title="Graph overlay clip generation")
 
 # ---------------- Sidebar: Input Source ----------------
 st.sidebar.header("0) Input source")
@@ -179,6 +144,9 @@ if st.sidebar.button("🚀 Generate frames + extract dynamics", type="primary"):
             )
         with st.spinner("Extracting bubble dynamics + overlays..."):
             extract_dynamics(folder=str(out_dir), out_overlays=str(out_dir / "overlays"))
+        with st.spinner("Extracting graph twin metrics + overlays (Phase-2)..."):
+            ensure_graph_metrics_and_clip(out_dir, fps=10)
+
 
         hl_txt = f"{half_life:.2f}s" if half_life is not None else "N/A"
         st.success(f"Done ✅ Half-life: {hl_txt} • Run: {out_dir}")
@@ -208,22 +176,6 @@ if not dyn_csv.exists():
     st.stop()
 
 df = pd.read_csv(dyn_csv).dropna(subset=["t_s"]).sort_values("t_s")
-
-# Phase-2 (optional): Graph metrics derived ONLY from Phase-1 outputs (frames + dynamics)
-with st.expander("Phase-2: Bubble graph digital twin", expanded=False):
-    if (run_dir / "graph_metrics.csv").exists():
-        show_graph_panel(run_dir)
-    else:
-        st.write("Graph metrics are not generated yet for this run.")
-        if st.button("Generate graph metrics for this run", key=f"gen_graph_{run_dir.name}"):
-            with st.spinner("Extracting graph metrics from Phase-1 frames..."):
-                ok = ensure_graph_metrics(run_dir)
-            if ok:
-                st.success("✅ Graph metrics generated.")
-                st.rerun()
-            else:
-                st.error("Graph metrics failed. Ensure frame_*.png exists in the run folder.")
-
 
 half_life = None
 if meta_csv.exists():
@@ -368,26 +320,7 @@ else:
     dfB = load_dynamics(runB)
 
     if dfA.empty or dfB.empty:
-        missing = []
-        if dfA.empty:
-            missing.append(runA_name)
-        if dfB.empty:
-            missing.append(runB_name)
-        st.warning("One of the selected runs is missing **bubble_dynamics.csv**: " + ", ".join([f"**{m}**" for m in missing]))
-
-        c1, c2 = st.columns(2)
-        with c1:
-            if dfA.empty and st.button(f"Extract dynamics for {runA_name}", key="extract_dyn_A"):
-                with st.spinner(f"Extracting dynamics for {runA_name}..."):
-                    okA = ensure_dynamics(runA)
-                st.success("✅ Done" if okA else "❌ Failed")
-                st.rerun()
-        with c2:
-            if dfB.empty and st.button(f"Extract dynamics for {runB_name}", key="extract_dyn_B"):
-                with st.spinner(f"Extracting dynamics for {runB_name}..."):
-                    okB = ensure_dynamics(runB)
-                st.success("✅ Done" if okB else "❌ Failed")
-                st.rerun()
+        st.warning("One of the selected runs is missing bubble_dynamics.csv. Please extract dynamics for both runs.")
     else:
         rateA = compute_coarsening_rate(dfA)
         rateB = compute_coarsening_rate(dfB)
@@ -432,84 +365,44 @@ else:
                 "- Falling circularity may indicate deformation/merging.\n"
                 "- Use this panel to compare GO vs NGO (or any two formulations) directly."
             )
+# --- Optional: Graph Twin Metrics (Phase-2) ---
+graph_csv = run_dir / "graph_metrics.csv"
 
+if graph_csv.exists():
+    st.subheader("🕸️ Bubble Neighbor Graph (Digital Twin)")
+    gdf = pd.read_csv(graph_csv)
 
-        # Phase-2 (optional): Compare graph metrics (topology of bubble network)
-        st.divider()
-        st.subheader("🧠 Phase-2 Digital Twin: Graph comparison")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Avg degree", f"{gdf['avg_degree'].mean():.2f}")
+    with col2:
+        st.metric("Giant component", f"{(100*gdf['giant_component_ratio'].mean()):.1f}%")
+    with col3:
+        st.metric("Graph density", f"{gdf['density'].mean():.4f}")
 
-        gA = runA / "graph_metrics.csv"
-        gB = runB / "graph_metrics.csv"
+    # safer: only plot if t_s exists
+    if "t_s" in gdf.columns:
+        st.line_chart(gdf.dropna(subset=["t_s"]).set_index("t_s")[["avg_degree", "giant_component_ratio"]].dropna())
+    else:
+        st.info("No t_s column found in graph_metrics.csv (showing summary metrics only).")
 
-        if not gA.exists() or not gB.exists():
-            missing_g = []
-            if not gA.exists(): missing_g.append(runA_name)
-            if not gB.exists(): missing_g.append(runB_name)
-            st.info("Graph metrics missing for: " + ", ".join([f"**{m}**" for m in missing_g]))
+    overlay_dir = run_dir / "graph_overlays"
+    if overlay_dir.exists():
+        frames = sorted([p.name for p in overlay_dir.glob("frame_*.png")])
+        if frames:
+            pick = st.select_slider("Graph overlay frame", options=frames, value=frames[0])
+            st.image(str(overlay_dir / pick), caption=f"Graph overlay: {pick}", use_container_width=True)
 
-            c1, c2 = st.columns(2)
-            with c1:
-                if not gA.exists() and st.button(f"Generate graph metrics for {runA_name}", key="gen_graph_A"):
-                    with st.spinner(f"Generating graph metrics for {runA_name} (from Phase-1 frames)..."):
-                        ok = ensure_graph_metrics(runA)
-                    st.success("✅ Done" if ok else "❌ Failed")
-                    st.rerun()
-            with c2:
-                if not gB.exists() and st.button(f"Generate graph metrics for {runB_name}", key="gen_graph_B"):
-                    with st.spinner(f"Generating graph metrics for {runB_name} (from Phase-1 frames)..."):
-                        ok = ensure_graph_metrics(runB)
-                    st.success("✅ Done" if ok else "❌ Failed")
-                    st.rerun()
-        else:
-            gdfA = pd.read_csv(gA).dropna(subset=["t_s"]).sort_values("t_s")
-            gdfB = pd.read_csv(gB).dropna(subset=["t_s"]).sort_values("t_s")
+    # Auto-show playable clip if it exists (no need to depend on slider)
+    clip_mp4 = run_dir / "graph_overlays.mp4"
+    clip_gif = run_dir / "graph_overlays.gif"
+    if clip_mp4.exists() or clip_gif.exists():
+        with st.expander("▶️ Play Graph Overlay Clip", expanded=False):
+            if clip_mp4.exists():
+                st.video(str(clip_mp4))
+            else:
+                st.image(str(clip_gif), caption="Graph overlay clip (GIF)", use_container_width=True)
 
-            # Align on time for plotting
-            GA = gdfA[["t_s", "avg_degree", "giant_component_ratio", "density"]].copy()
-            GB = gdfB[["t_s", "avg_degree", "giant_component_ratio", "density"]].copy()
-            GA = GA.rename(columns={c: f"A_{c}" for c in GA.columns if c != "t_s"})
-            GB = GB.rename(columns={c: f"B_{c}" for c in GB.columns if c != "t_s"})
-
-            gmerged = pd.merge(GA, GB, on="t_s", how="outer").sort_values("t_s")
-
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.caption("Avg degree (neighbors)")
-                st.line_chart(gmerged.set_index("t_s")[["A_avg_degree", "B_avg_degree"]])
-            with c2:
-                st.caption("Giant component ratio")
-                st.line_chart(gmerged.set_index("t_s")[["A_giant_component_ratio", "B_giant_component_ratio"]])
-            with c3:
-                st.caption("Graph density")
-                st.line_chart(gmerged.set_index("t_s")[["A_density", "B_density"]])
-
-
-            # Summary + verdict (graph twin)
-            A_avg_deg = float(gdfA["avg_degree"].mean()) if "avg_degree" in gdfA.columns else float("nan")
-            B_avg_deg = float(gdfB["avg_degree"].mean()) if "avg_degree" in gdfB.columns else float("nan")
-            A_giant = float(gdfA["giant_component_ratio"].mean()) if "giant_component_ratio" in gdfA.columns else float("nan")
-            B_giant = float(gdfB["giant_component_ratio"].mean()) if "giant_component_ratio" in gdfB.columns else float("nan")
-            A_density = float(gdfA["density"].mean()) if "density" in gdfA.columns else float("nan")
-            B_density = float(gdfB["density"].mean()) if "density" in gdfB.columns else float("nan")
-
-            # 0–100 graph stability score: connectivity (giant component) + neighborhood degree
-            denom_deg = float(np.nanmax([A_avg_deg, B_avg_deg, 1e-6]))
-            A_graph_score = 100.0 * (0.7 * A_giant + 0.3 * (A_avg_deg / denom_deg)) if np.isfinite(A_giant) and np.isfinite(A_avg_deg) else float("nan")
-            B_graph_score = 100.0 * (0.7 * B_giant + 0.3 * (B_avg_deg / denom_deg)) if np.isfinite(B_giant) and np.isfinite(B_avg_deg) else float("nan")
-
-            mg1, mg2, mg3, mg4 = st.columns(4)
-            mg1.metric("Graph score A", "N/A" if not np.isfinite(A_graph_score) else f"{A_graph_score:.1f}/100")
-            mg2.metric("Graph score B", "N/A" if not np.isfinite(B_graph_score) else f"{B_graph_score:.1f}/100")
-            mg3.metric("Avg degree (A vs B)", "N/A" if not np.isfinite(A_avg_deg) else f"{A_avg_deg:.2f}", None if not np.isfinite(A_avg_deg) or not np.isfinite(B_avg_deg) else f"{A_avg_deg - B_avg_deg:+.2f}")
-            mg4.metric("Giant comp % (A vs B)", "N/A" if not np.isfinite(A_giant) else f"{A_giant*100:.1f}%", None if not np.isfinite(A_giant) or not np.isfinite(B_giant) else f"{(A_giant - B_giant)*100:+.1f}%")
-
-            # Combined verdict: Lite (coarsening) + Graph twin
-            if np.isfinite(scoreA) and np.isfinite(scoreB) and np.isfinite(A_graph_score) and np.isfinite(B_graph_score):
-                combinedA = 0.6 * scoreA + 0.4 * A_graph_score
-                combinedB = 0.6 * scoreB + 0.4 * B_graph_score
-                st.success(f"🏁 Final verdict (Lite+Graph): **Run A**" if combinedA > combinedB else (f"🏁 Final verdict (Lite+Graph): **Run B**" if combinedB > combinedA else "🏁 Final verdict (Lite+Graph): **Tie**"))
-                st.caption(f"Combined scores → A: {combinedA:.1f}/100 | B: {combinedB:.1f}/100")
-
-            st.caption("Interpretation: higher connectivity / lower fragmentation often indicates slower coarsening (more stable foam).")
- 
- 
+else:
+    st.info(f"Graph metrics not found for **{run_dir.name}**. Run the command below:")
+    st.code(f"PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_dir}", language="bash")
