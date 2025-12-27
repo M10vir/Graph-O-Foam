@@ -3,6 +3,11 @@ from pathlib import Path
 from datetime import datetime
 import streamlit as st
 import pandas as pd
+try:
+    import joblib
+except Exception:
+    joblib = None
+
 import numpy as np
 import cv2
 import os
@@ -77,7 +82,7 @@ def run_cli(cmd: list[str], title: str = "Running...") -> bool:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT)
     try:
-        subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
+        subprocess.run(cmd, check=True, env=env, cwd=str(ROOT), capture_output=True, text=True)
         return True
     except subprocess.CalledProcessError as e:
         st.error(f"{title} failed (exit={e.returncode}).")
@@ -108,6 +113,137 @@ def ensure_graph_metrics_and_clip(run_path: Path, fps: int = 10) -> None:
         return
     cmd2 = [sys.executable, str(clip_script), "--folder", str(run_path), "--fps", str(int(fps))]
     run_cli(cmd2, title="Graph overlay clip generation")
+
+
+def ensure_graph_artifacts(run_path: Path, fps: int = 10) -> tuple[bool, str]:
+    """Generate Phase-2 graph metrics + overlays + clip if missing.
+
+    Returns (ok, message).
+    """
+    ensure_graph_metrics_and_clip(run_path, fps=fps)
+    graph_csv = run_path / "graph_metrics.csv"
+    clip_mp4 = run_path / "graph_overlays.mp4"
+    clip_gif = run_path / "graph_overlays.gif"
+    if not graph_csv.exists():
+        return False, f"graph_metrics.csv not created in {run_path}"
+    if not (clip_mp4.exists() or clip_gif.exists()):
+        # clip may be optional if ffmpeg missing, so keep message informative
+        return True, "Graph metrics created, but clip not found (check ffmpeg / overlays)."
+    return True, "OK"
+
+
+# --- ML helpers (Phase-3 / AI-ML) ---
+DEFAULT_MODEL_FEATURES = [
+    "r_mean_early_slope",
+    "avg_degree_early_mean",
+    "avg_degree_early_slope",
+    "circ_early_mean",
+    "r_mean_early_mean",
+    "n_early_slope",
+    "density_early_slope",
+    "energy_proxy_early",
+]
+
+@st.cache_resource
+def load_coarsening_model():
+    """Load the trained model bundle saved by src/ml/train_model.py.
+
+    Supports either:
+    - a scikit-learn estimator (has .predict)
+    - a dict bundle: {"model": estimator, "feature_names": [...]}
+    """
+    model_path = ROOT / "models" / "coarsening_rf.joblib"
+    if joblib is None:
+        return None, None, "joblib is not available. Install with: pip install joblib"
+    if not model_path.exists():
+        return None, None, f"Model not found at {model_path}. Train it with: PYTHONPATH=. python src/ml/train_model.py"
+    obj = joblib.load(model_path)
+    # direct estimator
+    if hasattr(obj, "predict"):
+        return obj, None, None
+    # bundle dict
+    if isinstance(obj, dict):
+        feat_names = obj.get("feature_names") or obj.get("features")
+        # common keys
+        for k in ("model", "estimator", "pipeline", "clf", "regressor"):
+            v = obj.get(k)
+            if hasattr(v, "predict"):
+                return v, feat_names, None
+        # fallback: first value that looks like an estimator
+        for v in obj.values():
+            if hasattr(v, "predict"):
+                return v, feat_names, None
+        return None, feat_names, "Model bundle dict did not include a sklearn estimator."
+    return None, None, f"Unsupported model format: {type(obj)}"
+
+def _early_window(df, t_col="t_s", frac=0.25, min_n=6):
+    """Return an early subset used for 'early' features."""
+    if df is None or df.empty:
+        return df
+    if t_col in df.columns:
+        d = df.dropna(subset=[t_col]).sort_values(t_col)
+    else:
+        d = df.copy()
+    n = max(min_n, int(len(d) * frac))
+    return d.head(min(n, len(d)))
+
+def _slope(x, y):
+    import numpy as np
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if len(x) < 2:
+        return float("nan")
+    x0 = x - x.mean()
+    denom = (x0 ** 2).sum()
+    if denom == 0:
+        return float("nan")
+    return float((x0 * (y - y.mean())).sum() / denom)
+
+def build_ml_features(run_dir: Path):
+    """Compute ML features for a run using Phase-1 + Phase-2 CSV outputs."""
+    dyn_csv = run_dir / "bubble_dynamics.csv"
+    graph_csv = run_dir / "graph_metrics.csv"
+
+    if not dyn_csv.exists():
+        return None, f"Missing {dyn_csv.name}."
+    if not graph_csv.exists():
+        return None, f"Missing {graph_csv.name}."
+
+    bdf = pd.read_csv(dyn_csv)
+    gdf = pd.read_csv(graph_csv)
+
+    b_early = _early_window(bdf, t_col="t_s")
+    g_early = _early_window(gdf, t_col="t_s")
+
+    feats = {}
+
+    # Bubble dynamics early features
+    if "t_s" in b_early.columns:
+        t = b_early["t_s"].values
+        feats["r_mean_early_slope"] = _slope(t, b_early["r_mean"].values) if "r_mean" in b_early.columns else float("nan")
+        feats["n_early_slope"] = _slope(t, b_early["n"].values) if "n" in b_early.columns else float("nan")
+    else:
+        feats["r_mean_early_slope"] = float("nan")
+        feats["n_early_slope"] = float("nan")
+
+    feats["r_mean_early_mean"] = float(b_early["r_mean"].mean()) if "r_mean" in b_early.columns else float("nan")
+    feats["circ_early_mean"] = float(b_early["circ_mean"].mean()) if "circ_mean" in b_early.columns else float("nan")
+
+    # Graph early features
+    if "t_s" in g_early.columns:
+        tg = g_early["t_s"].values
+        feats["avg_degree_early_slope"] = _slope(tg, g_early["avg_degree"].values) if "avg_degree" in g_early.columns else float("nan")
+        feats["density_early_slope"] = _slope(tg, g_early["density"].values) if "density" in g_early.columns else float("nan")
+    else:
+        feats["avg_degree_early_slope"] = float("nan")
+        feats["density_early_slope"] = float("nan")
+
+    feats["avg_degree_early_mean"] = float(g_early["avg_degree"].mean()) if "avg_degree" in g_early.columns else float("nan")
+
+    # Simple engineered proxy
+    feats["energy_proxy_early"] = float(feats["r_mean_early_mean"] * feats["avg_degree_early_mean"])
+
+    return feats, None
 
 # ---------------- Sidebar: Input Source ----------------
 st.sidebar.header("0) Input source")
@@ -438,6 +574,59 @@ if graph_csv.exists():
             else:
                 st.image(str(clip_gif), caption="Graph overlay clip (GIF)", use_container_width=True)
 
+    else:
+        st.info("No overlay clip found for this run.")
+        st.code(f"PYTHONPATH=. python src/tasks/make_graph_overlay_clip.py --folder {run_dir} --fps 10", language="bash")
+        if st.button("🎬 Generate overlay clip for this run", key=f"gen_clip_{run_dir.name}"):
+            with st.spinner("Generating overlay clip (mp4)…"):
+                ok, out = ensure_graph_artifacts(run_dir)
+            if ok:
+                st.success("Clip generated. Reloading…")
+                st.rerun()
+            else:
+                st.error(out)
 else:
-    st.info(f"Graph metrics not found for **{run_dir.name}**. Run the command below:")
-    st.code(f"PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_dir}", language="bash")
+    st.info(f"Graph metrics not found for **{run_dir.name}**. You can generate them from Streamlit or via CLI.")
+
+    colg1, colg2 = st.columns([1, 2])
+    with colg1:
+        if st.button("⚙️ Generate graph metrics + clip for this run", key=f"gen_graph_all_{run_dir.name}"):
+            with st.spinner("Generating graph metrics + overlays + clip…"):
+                ok, out = ensure_graph_artifacts(run_dir)
+            if ok:
+                st.success("Generated. Reloading…")
+                st.rerun()
+            else:
+                st.error(out)
+    with colg2:
+        st.caption("CLI fallback:")
+        st.code(f"PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_dir}", language="bash")
+        st.code(f"PYTHONPATH=. python src/tasks/make_graph_overlay_clip.py --folder {run_dir} --fps 10", language="bash")
+
+# --- AI/ML: Early Coarsening Predictor (Phase-3) ---
+st.subheader("🤖 AI/ML: Early Coarsening Predictor")
+
+model, feat_names, err = load_coarsening_model()
+if err:
+    st.info(err)
+else:
+    feats, ferr = build_ml_features(run_dir)
+    if ferr:
+        st.warning(f"ML features not ready: {ferr}")
+        st.info("Tip: make sure this run has both bubble_dynamics.csv and graph_metrics.csv (Phase-1 + Phase-2 outputs).")
+    else:
+        feature_order = feat_names or DEFAULT_MODEL_FEATURES
+        X = pd.DataFrame([{k: feats.get(k, float('nan')) for k in feature_order}])
+
+        st.caption("Features used for prediction (early-window summary):")
+        st.dataframe(X, use_container_width=True)
+
+        try:
+            yhat = model.predict(X)[0]
+            st.success(f"Predicted early coarsening score: **{float(yhat):.6f}**")
+        except Exception as e:
+            st.error(f"ML prediction failed: {e}")
+            with st.expander("Debug details"):
+                st.write("Loaded model type:", type(model))
+                st.write("Feature order:", feature_order)
+                st.write("X:", X)
