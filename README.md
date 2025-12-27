@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="assets/GoF_banner.jpeg" alt="Banner" width="100%" />
+</p>
+
+
 <h1 align="center">Graph‑O‑Foam: ActiveScan Copilot (Lite)</h1>
 <h3 align="center">XLSX → Frames → Bubble Dynamics → Stability → Comparison</h3>
 
