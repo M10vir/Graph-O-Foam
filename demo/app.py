@@ -92,7 +92,38 @@ def run_cli(cmd: list[str], title: str = "Running...") -> bool:
             st.code(e.stderr, language="text")
         return False
 
-def ensure_graph_metrics_and_clip(run_path: Path, fps: int = 10) -> None:
+
+def ensure_dynamics_artifacts(run_path: Path, force: bool = False) -> tuple[bool, str]:
+    """
+    Generate Phase-1/2 dynamics artifacts for a run folder if missing.
+
+    Expected outputs:
+      - bubble_dynamics.csv
+      - overlays/ (segmentation overlays from extract_dynamics)
+
+    Returns: (ok, message)
+    """
+    dyn_csv = run_path / "bubble_dynamics.csv"
+    overlays_dir = run_path / "overlays"
+    script = ROOT / "src" / "tasks" / "extract_dynamics.py"
+
+    if (dyn_csv.exists() and overlays_dir.exists() and not force):
+        return True, "Dynamics already present."
+
+    if not script.exists():
+        return False, f"Missing task script: {script}"
+
+    cmd = [sys.executable, str(script), "--folder", str(run_path)]
+    ok = run_cli(cmd, title="Dynamics extraction")
+    if not ok:
+        return False, "Dynamics extraction failed. See logs above."
+
+    if dyn_csv.exists():
+        return True, "✅ Dynamics generated."
+    return False, "Dynamics task ran, but bubble_dynamics.csv not found."
+
+
+def ensure_graph_metrics_and_clip(run_path: Path, fps: int = 10, force: bool = False, make_gif: bool = False) -> None:
     """Phase-2 automation: extract graph metrics/overlays, then (optionally) build an MP4/GIF clip."""
     # 1) Graph metrics + overlays
     graph_csv = run_path / "graph_metrics.csv"
@@ -104,7 +135,7 @@ def ensure_graph_metrics_and_clip(run_path: Path, fps: int = 10) -> None:
     clip_mp4 = run_path / "graph_overlays.mp4"
     overlay_dir = run_path / "graph_overlays"
     clip_script = ROOT / "src" / "tasks" / "make_graph_overlay_clip.py"
-    if clip_mp4.exists():
+    if clip_mp4.exists() and not force:
         return
     if not overlay_dir.exists():
         return
@@ -115,12 +146,12 @@ def ensure_graph_metrics_and_clip(run_path: Path, fps: int = 10) -> None:
     run_cli(cmd2, title="Graph overlay clip generation")
 
 
-def ensure_graph_artifacts(run_path: Path, fps: int = 10) -> tuple[bool, str]:
+def ensure_graph_artifacts(run_path: Path, fps: int = 10, force: bool = False) -> tuple[bool, str]:
     """Generate Phase-2 graph metrics + overlays + clip if missing.
 
     Returns (ok, message).
     """
-    ensure_graph_metrics_and_clip(run_path, fps=fps)
+    ensure_graph_metrics_and_clip(run_path, fps=fps, force=force)
     graph_csv = run_path / "graph_metrics.csv"
     clip_mp4 = run_path / "graph_overlays.mp4"
     clip_gif = run_path / "graph_overlays.gif"
@@ -145,46 +176,6 @@ DEFAULT_MODEL_FEATURES = [
 ]
 
 @st.cache_resource
-def ensure_dynamics_artifacts(run_path: Path) -> tuple[bool, str]:
-    """Ensure bubble_dynamics.csv + overlays/ exist for a run folder."""
-    dynamics_csv = run_path / "bubble_dynamics.csv"
-    overlays_dir = run_path / "overlays"
-
-    # Already present?
-    if dynamics_csv.exists() and overlays_dir.exists():
-        try:
-            if any(overlays_dir.glob("frame_*.png")):
-                return True, "Dynamics + overlays already present."
-        except Exception:
-            return True, "Dynamics already present."
-
-    script = ROOT / "src" / "tasks" / "extract_dynamics.py"
-    if not script.exists():
-        return False, f"Missing task script: {script}"
-
-    # Prefer writing overlays inside the run folder (avoids hard-coded default paths)
-    overlays_dir.mkdir(parents=True, exist_ok=True)
-
-    # Try with --overlays (newer versions), fallback to only --folder if not supported
-    cmd = [
-        sys.executable,
-        str(script),
-        "--folder",
-        str(run_path),
-        "--overlays",
-        str(overlays_dir),
-    ]
-    ok, msg = run_cli(cmd)
-
-    if (not ok) and ("unrecognized arguments" in msg) and ("--overlays" in msg):
-        cmd = [sys.executable, str(script), "--folder", str(run_path)]
-        ok, msg = run_cli(cmd)
-
-    if not dynamics_csv.exists():
-        return False, f"extract_dynamics did not create {dynamics_csv.name}.\n\n{msg}"
-
-    return ok, msg
-
 def load_coarsening_model():
     """Load the trained model bundle saved by src/ml/train_model.py.
 
@@ -576,64 +567,67 @@ else:
                 "- Falling circularity may indicate deformation/merging.\n"
                 "- Use this panel to compare GO vs NGO (or any two formulations) directly."
             )
-# --- Phase-2: Bubble Graph Digital Twin (dynamics + graph + overlays/clip) ---
+
+# --- Phase-2 generation (one-click) ---
 st.subheader("🕸️ Phase-2: Bubble Graph Digital Twin")
 
-dynamics_csv = run_dir / "bubble_dynamics.csv"
+dyn_csv = run_dir / "bubble_dynamics.csv"
 graph_csv = run_dir / "graph_metrics.csv"
-overlay_dir = run_dir / "graph_overlays"
 clip_mp4 = run_dir / "graph_overlays.mp4"
 clip_gif = run_dir / "graph_overlays.gif"
 
-missing = []
-if not dynamics_csv.exists():
-    missing.append("bubble_dynamics.csv")
-if not graph_csv.exists():
-    missing.append("graph_metrics.csv")
-if (not overlay_dir.exists()) or (not any(overlay_dir.glob("frame_*.png"))):
-    missing.append("graph_overlays/*.png")
+with st.expander("⚙️ Phase-2 generation (one-click)", expanded=False):
+    c1, c2, c3 = st.columns(3)
 
-if missing:
-    st.info(
-        f"Phase-2 artifacts missing for **{run_dir.name}**: " + ", ".join(missing) + ". "
-        "You can generate them with one click (recommended) or via CLI."
-    )
+    with c1:
+        st.caption("Dynamics")
+        st.success("✅ Present" if dyn_csv.exists() else "❌ Missing")
+    with c2:
+        st.caption("Graph metrics")
+        st.success("✅ Present" if graph_csv.exists() else "❌ Missing")
+    with c3:
+        st.caption("Clip")
+        st.success("✅ Present" if (clip_mp4.exists() or clip_gif.exists()) else "❌ Missing")
 
-    # One-click generation (no manual CLI needed)
-    if st.button("⚡ Generate Phase‑2 artifacts (dynamics + graph + clip)", use_container_width=True):
-        ok_d = True
-        ok_g = True
-        msg_d = ""
-        msg_g = ""
+    all_present = dyn_csv.exists() and graph_csv.exists() and (clip_mp4.exists() or clip_gif.exists())
+    if all_present:
+        st.info("All Phase-2 artifacts are present. You can regenerate if you want.")
+    else:
+        st.info("Some Phase-2 artifacts are missing. Generate them here (no CLI needed).")
 
-        with st.spinner("Generating bubble dynamics + overlays…"):
-            ok_d, msg_d = ensure_dynamics_artifacts(run_dir)
+    colA, colB = st.columns([1, 1])
 
-        with st.spinner("Generating graph metrics + overlays + clip…"):
-            ok_g, msg_g = ensure_graph_artifacts(run_dir, fps=10)
-
-        if ok_d and ok_g:
-            st.success("✅ Phase-2 artifacts generated. Re-loading the run…")
+    with colA:
+        if st.button("🧠 Generate graph metrics + clip for this run", use_container_width=True):
+            with st.spinner("Generating graph metrics + clip..."):
+                ok_g, msg_g = ensure_graph_artifacts(run_dir, fps=10, force=True)
+                st.success(msg_g) if ok_g else st.error(msg_g)
             st.rerun()
-        else:
-            st.error("❌ One-click generation failed. Details below:")
-            if not ok_d:
-                st.code(msg_d)
-            if not ok_g:
-                st.code(msg_g)
 
-    # CLI fallback (kept for stability/debug)
-    if not dynamics_csv.exists():
-        st.caption("CLI fallback (bubble dynamics):")
-        st.code(f"PYTHONPATH=. python src/tasks/extract_dynamics.py --folder {run_dir}", language="bash")
+    with colB:
+        force_all = st.checkbox("Force regenerate all", value=False)
+        make_gif = st.checkbox("Also generate GIF (large)", value=False)
+        if st.button("⚡ Generate Phase-2 artifacts (dynamics + graph + clip)", use_container_width=True):
+            with st.spinner("Generating Phase-2 artifacts..."):
+                ok1, msg1 = ensure_dynamics_artifacts(run_dir, force=force_all)
+                st.success(msg1) if ok1 else st.error(msg1)
 
-    if not graph_csv.exists():
-        st.caption("CLI fallback (graph metrics + clip):")
-        st.code(f"PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_dir}", language="bash")
-        st.code(f"PYTHONPATH=. python src/tasks/make_graph_overlay_clip.py --folder {run_dir} --fps 10", language="bash")
+                ok2, msg2 = ensure_graph_artifacts(run_dir, fps=10, force=force_all)
+                st.success(msg2) if ok2 else st.error(msg2)
 
-# Render graph metrics if present
+                # If user asked for GIF, ensure_graph_metrics_and_clip will create it
+                if make_gif:
+                    ensure_graph_metrics_and_clip(run_dir, fps=10, force=force_all, make_gif=True)
+
+            st.rerun()
+
+
+
+# --- Optional: Graph Twin Metrics (Phase-2) ---
+graph_csv = run_dir / "graph_metrics.csv"
+
 if graph_csv.exists():
+    st.subheader("🕸️ Bubble Neighbor Graph (Digital Twin)")
     gdf = pd.read_csv(graph_csv)
 
     col1, col2, col3 = st.columns(3)
@@ -646,32 +640,55 @@ if graph_csv.exists():
 
     # safer: only plot if t_s exists
     if "t_s" in gdf.columns:
-        st.line_chart(gdf.set_index("t_s")[["avg_degree", "giant_component_ratio"]].dropna())
+        st.line_chart(gdf.dropna(subset=["t_s"]).set_index("t_s")[["avg_degree", "giant_component_ratio"]].dropna())
+    else:
+        st.info("No t_s column found in graph_metrics.csv (showing summary metrics only).")
 
-    # Graph overlay frames
+    overlay_dir = run_dir / "graph_overlays"
     if overlay_dir.exists():
         frames = sorted([p.name for p in overlay_dir.glob("frame_*.png")])
         if frames:
             pick = st.select_slider("Graph overlay frame", options=frames, value=frames[0])
             st.image(str(overlay_dir / pick), caption=f"Graph overlay: {pick}", use_container_width=True)
 
-    # Auto-show playable clip if it exists; otherwise offer a button to generate it (if overlays exist)
+    # Auto-show playable clip if it exists (no need to depend on slider)
+    clip_mp4 = run_dir / "graph_overlays.mp4"
+    clip_gif = run_dir / "graph_overlays.gif"
     if clip_mp4.exists() or clip_gif.exists():
         with st.expander("▶️ Play Graph Overlay Clip", expanded=False):
             if clip_mp4.exists():
                 st.video(str(clip_mp4))
             else:
                 st.image(str(clip_gif), caption="Graph overlay clip (GIF)", use_container_width=True)
-    elif overlay_dir.exists() and any(overlay_dir.glob("frame_*.png")):
-        if st.button("🎬 Generate clip now (MP4)", key=f"gen_clip_{run_dir.name}"):
-            with st.spinner("Creating MP4 clip from graph_overlays/*.png …"):
-                ok, msg = ensure_graph_artifacts(run_dir, fps=10)
-                if ok:
-                    st.success("✅ Clip generated. Re-loading…")
-                    st.rerun()
-                else:
-                    st.error("❌ Clip generation failed.")
-                    st.code(msg)
+
+    else:
+        st.info("No overlay clip found for this run.")
+        st.code(f"PYTHONPATH=. python src/tasks/make_graph_overlay_clip.py --folder {run_dir} --fps 10", language="bash")
+        if st.button("🎬 Generate overlay clip for this run", key=f"gen_clip_{run_dir.name}"):
+            with st.spinner("Generating overlay clip (mp4)…"):
+                ok, out = ensure_graph_artifacts(run_dir)
+            if ok:
+                st.success("Clip generated. Reloading…")
+                st.rerun()
+            else:
+                st.error(out)
+else:
+    st.info(f"Graph metrics not found for **{run_dir.name}**. You can generate them from Streamlit or via CLI.")
+
+    colg1, colg2 = st.columns([1, 2])
+    with colg1:
+        if st.button("⚙️ Generate graph metrics + clip for this run", key=f"gen_graph_all_{run_dir.name}"):
+            with st.spinner("Generating graph metrics + overlays + clip…"):
+                ok, out = ensure_graph_artifacts(run_dir)
+            if ok:
+                st.success("Generated. Reloading…")
+                st.rerun()
+            else:
+                st.error(out)
+    with colg2:
+        st.caption("CLI fallback:")
+        st.code(f"PYTHONPATH=. python src/tasks/extract_graph_metrics.py --folder {run_dir}", language="bash")
+        st.code(f"PYTHONPATH=. python src/tasks/make_graph_overlay_clip.py --folder {run_dir} --fps 10", language="bash")
 
 # --- AI/ML: Early Coarsening Predictor (Phase-3) ---
 st.subheader("🤖 AI/ML: Early Coarsening Predictor")
