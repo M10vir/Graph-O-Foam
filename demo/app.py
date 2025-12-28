@@ -316,26 +316,48 @@ else:
 
 # ---------------- Sidebar: Generate Run ----------------
 st.sidebar.header("2) Generate run")
-default_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-if bd_path is not None:
-    # nicer default run name based on file stem
-    default_name = f"{bd_path.stem.replace(' ','_')}_{datetime.now().strftime('%H%M%S')}"
 
-run_name_raw = st.sidebar.text_input("Run name", value=default_name)
+def _compute_default_name():
+    if bd_path is not None:
+        base = bd_path.stem.replace(" ", "_")
+        # keep the timestamp, but ONLY generate once (stored in session_state)
+        return f"{base}_{datetime.now().strftime('%H%M%S')}"
+    return f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+# Track changes in input source (so default updates when a new BD is chosen/uploaded)
+src_marker = None
+if bd_path is not None:
+    src_marker = str(bd_path)
+
+if ("proposed_run_name" not in st.session_state) or (st.session_state.get("proposed_src_marker") != src_marker):
+    st.session_state["proposed_run_name"] = _compute_default_name()
+    st.session_state["proposed_src_marker"] = src_marker
+
+run_name_raw = st.sidebar.text_input("Run name", value=st.session_state["proposed_run_name"], key="run_name_input")
+
+# Sanitize ONLY once, and reuse the result everywhere
 run_name = run_name_raw
 if input_source.startswith("Option B"):
     sanitized = sanitize_run_name(run_name_raw)
     if sanitized != run_name_raw:
         st.sidebar.info(f"Sanitized run folder name: {sanitized}")
     run_name = sanitized
+
 nframes = st.sidebar.number_input("Frames (0 = ALL)", min_value=0, max_value=5000, value=0, step=10)
 
 out_dir = DATA_SYNTH / run_name
+
+# ✅ Read-only preview of the ACTUAL folder name that will be used
+st.sidebar.text_input("Preview run folder name", value=out_dir.name, disabled=True)
 
 if st.sidebar.button("🚀 Generate frames + extract dynamics", type="primary"):
     if bd_path is None or hd_path is None:
         st.sidebar.error("Please provide BOTH BD.xlsx and HD.xlsx.")
     else:
+        # Freeze the final name for this click so reruns never drift
+        st.session_state["proposed_run_name"] = run_name
+        st.session_state["proposed_src_marker"] = src_marker
+
         with st.spinner("Generating synthetic microscopy frames..."):
             half_life = generate_sequence(
                 bd_xlsx=str(bd_path),
@@ -344,14 +366,17 @@ if st.sidebar.button("🚀 Generate frames + extract dynamics", type="primary"):
                 n_frames=int(nframes),
                 seed=7
             )
+
         with st.spinner("Extracting bubble dynamics + overlays..."):
             extract_dynamics(folder=str(out_dir), out_overlays=str(out_dir / "overlays"))
+
         with st.spinner("Extracting graph twin metrics + overlays (Phase-2)..."):
             ensure_graph_metrics_and_clip(out_dir, fps=10)
 
-
         hl_txt = f"{half_life:.2f}s" if half_life is not None else "N/A"
         st.success(f"Done ✅ Half-life: {hl_txt} • Run: {out_dir}")
+
+        # ✅ Store the REAL folder for the rest of the app
         st.session_state["run_dir"] = str(out_dir)
         st.rerun()
 
