@@ -13,6 +13,7 @@ gitdb==4.0.12
 GitPython==3.1.45
 idna==3.11
 ImageIO==2.37.2
+imageio-ffmpeg==0.6.0
 Jinja2==3.1.6
 joblib==1.5.3
 jsonschema==4.25.1
@@ -24,7 +25,7 @@ matplotlib==3.10.8
 narwhals==2.14.0
 networkx==3.6.1
 numpy==2.2.6
-opencv-python==4.12.0.88
+opencv-python-headless==4.12.0.88
 openpyxl==3.1.5
 packaging==25.0
 pandas==2.3.3
@@ -52,4 +53,4 @@ tornado==6.5.4
 tqdm==4.67.1
 typing_extensions==4.15.0
 tzdata==2025.3
-urllib3==2.6.2
+urllib3==2.6.2 
