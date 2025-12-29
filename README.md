@@ -124,30 +124,51 @@ Graph-O-Foam/
 ```mermaid
 flowchart TD
     A[Start] --> B{Input method?}
-    B --> C1[Option A: Select BD.xlsx and HD.xlsx from local folder]
-    B --> C2[Option B: Upload BD.xlsx and HD.xlsx via Streamlit dashboard]
-    C1 --> D[Load XLSX using pandas and openpyxl]
+
+    B --> C1[Option A: Pick BD.xlsx + HD.xlsx from data/sheets]
+    B --> C2[Option B: Upload BD.xlsx + HD.xlsx in Streamlit]
+
+    C1 --> D[Read XLSX with pandas/openpyxl]
     C2 --> D
-    D --> E[Synthetic microscopy frame generator from BD]
-    E --> F[Stability target from HD]
-    F --> F1[Half-life if 50 percent reached]
-    F --> F2[Not reached within window]
-    F --> G[Sample bubble radii from BD stats]
-    G --> H[Place bubbles on canvas - non-overlap packing]
-    H --> I[Render microscopy-like frames with noise and blur]
-    I --> J[Outputs: frame images and frames metadata]
-    J --> K[Bubble dynamics extraction using OpenCV]
-    K --> L[Threshold and morphology]
-    L --> M[Contours and bubble metrics]
-    M --> N[Outputs: bubble dynamics and overlays]
-    N --> O[Lite stability forecast]
-    O --> P[Coarsening rate - slope of r_mean over time]
-    P --> Q[Stability score from 0 to 100]
-    Q --> R[Streamlit dashboard]
-    R --> R1[Frames and overlays viewer]
-    R --> R2[Plots of N over time, r_mean, circularity]
-    R --> R3[Compare Run A versus Run B]
-    R3 --> R4[Winner label - More stable]
+
+    D --> E[Phase-1: Synthetic frame generation]
+    E --> F[Compute foam stability target from HD\n(Vfoam half-life if 50% reached)]
+    F --> F1[Half-life computed (t at 50% Vfoam)]
+    F --> F2[Half-life not reached → None/NA]
+
+    E --> G[Sample bubble size stats from BD]
+    G --> H[Place bubbles on canvas\n(non-overlap packing)]
+    H --> I[Render microscopy-like frames\n(noise/blur/contrast)]
+    I --> J[Outputs: frame_*.png + run folder]
+
+    J --> K[Phase-1: Bubble dynamics extraction (OpenCV)]
+    K --> L[Threshold + morphology]
+    L --> M[Contours → bubble metrics per frame\n(n, r_mean, r_std, circularity...)]
+    M --> N[Outputs: bubble_dynamics.csv + overlays/]
+
+    N --> O[Phase-2: Bubble Neighbor Graph (Digital Twin)]
+    O --> P[Build graph per frame\n(nodes=bubbles, edges=neighbors)]
+    P --> Q[Compute graph metrics over time\n(avg_degree, density, giant_component...)]
+    Q --> R[Outputs: graph_metrics.csv + graph_overlays/]
+
+    R --> S[Clip Builder (ffmpeg)]
+    S --> S1[graph_overlays.mp4]
+    S --> S2[graph_overlays.gif]
+
+    Q --> T[AI/ML Baseline (trained offline)]
+    T --> U[Train RF regressor on early-window features\n(bubble + graph metrics)]
+    U --> V[Saved model artifact\nmodels/*.joblib]
+
+    N --> W[Streamlit Dashboard]
+    R --> W
+    S1 --> W
+    S2 --> W
+    V --> W
+
+    W --> W1[Run viewer: frames, overlays, charts]
+    W --> W2[Graph Twin viewer: metrics + overlays\nPlay clip if exists]
+    W --> W3[Compare Run A vs Run B\n(winner = more stable)]
+    W --> W4[One-click buttons\nGenerate graph metrics + clip\n(no CLI needed)]
 ```
 
 ## 5) Quickstart
