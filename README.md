@@ -2,12 +2,11 @@
   <img src="assets/GoF_banner.jpeg" alt="Banner" width="100%" />
 </p>
 
-
-<h1 align="center">Graph‑O‑Foam: ActiveScan Copilot (Lite)</h1>
-<h3 align="center">XLSX → Frames → Bubble Dynamics → Stability → Comparison</h3>
+<h1 align="center">Graph-O-Foam — ActiveScan Copilot (Lite)</h1>
+<h3 align="center">XLSX Datasheets → Synthetic Microscopy Frames → Bubble Dynamics → Graph Digital Twin → ML Stability Forecast</h3>
 
 <p align="center">
-  Microscopy Hackathon 2025 — AISCIA Use Case
+  <b>Microscopy Hackathon 2025 — AISCIA Use Case (adapted for petroleum fluids)</b>
 </p>
 
 <p align="center">
@@ -30,6 +29,12 @@
   <!-- OpenCV -->
   <img src="https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?logo=opencv&logoColor=white" />
 
+  <!-- Scikit-ML -->
+  <img src="https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white" />
+
+  <!-- FFmpeg -->
+  <img src="https://img.shields.io/badge/FFmpeg-Clip-007808?logo=ffmpeg&logoColor=white" />
+
   <!-- Git -->
   <img src="https://img.shields.io/badge/Git-Version%20Control-F05032?logo=git&logoColor=white" />
 
@@ -37,10 +42,6 @@
   <img src="https://img.shields.io/badge/GitHub-Repo-181717?logo=github&logoColor=white" />
 
 </p>
-
-# Graph-O-Foam: ActiveScan Copilot (Lite)
-Microscopy Hackathon 2025 (AISCIA Use Case)  
-From XLSX datasheets → microscopy-like frames → bubble dynamics → stability forecast + GO vs NGO comparison
 
 ---
 
