@@ -1,91 +1,126 @@
-````md
-# Graph-O-Foam: ActiveScan Copilot (Lite)
+# Graph-O-Foam — ActiveScan Copilot (Phase 1 + Phase 2)
 ## Machine Learning for Microscopy Hackathon 2025 — AISCIA Use Case (Doha, Qatar)
 
 ### 1) Executive Summary
-Foam stability depends on how bubbles evolve over time (coarsening, merging, deformation). A key challenge in microscopy-driven workflows is converting raw observations into **quantitative bubble dynamics** and a **clear stability comparison** between formulations (e.g., GO vs NGO).  
-**Graph-O-Foam: ActiveScan Copilot (Lite)** delivers an explainable pipeline that goes from **BD + HD datasheets (XLSX)** to **microscopy-like frames**, extracts bubble dynamics using **computer vision**, and provides a **stability forecast + run-to-run comparison** inside an interactive dashboard.
+Foam/emulsion stability in **petroleum liquids** depends on how bubbles evolve over time (coarsening, merging, deformation) and how quickly the bulk foam volume decays. The practical challenge is that teams often have **datasheets (BD + HD XLSX)** but not consistent microscopy imagery — and manual interpretation is slow.
+
+**Graph-O-Foam** delivers an end-to-end, **explainable** pipeline:
+**BD+HD datasheets → synthetic microscopy frames → bubble dynamics → graph-based digital twin metrics → ML stability forecast + GO vs NGO comparison**, all inside a Streamlit dashboard.
+
+This project is designed to be **hackathon-ready**: reproducible, demo-friendly, and grounded in measurable outputs (`.png`, `.csv`, `.mp4/.gif`).
 
 ---
 
 ### 2) Problem Statement
-Microscopy images contain rich information about bubble size distributions and coarsening behavior, but:
-- Manual interpretation is slow and inconsistent.
-- Experiments often produce heterogeneous data: sometimes only datasheets (BD/HD), sometimes images, sometimes both.
-- Teams need a repeatable way to **quantify bubble patterns**, **track dynamics over time**, and **compare stability across conditions**.
+Microscopy contains rich signals about bubble size distributions and coarsening behavior, but:
+- manual inspection is slow and inconsistent,
+- datasets are heterogeneous (sometimes only datasheets, sometimes images),
+- stakeholders need a repeatable way to **quantify bubble patterns**, track dynamics, and **compare stability across formulations/conditions** (e.g., GO vs NGO).
 
-This hackathon use case asks for workflows that link bubble patterns in microscopy images to foam stability metrics such as coarsening rate, bubble size distribution shifts, and foam half-life.
-
----
-
-### 3) Data and Inputs
-We operate on paired spreadsheets:
-- **BD (Bubble Dynamics sheet, XLSX):** time-series bubble statistics (e.g., bubble count density, mean area, std area).
-- **HD (Foam stability sheet, XLSX):** time-series foam stability signal (e.g., `Vfoam [mL]`, foam height/volume vs time), enabling half-life estimation when the 50% threshold is observed.
-
-The app supports:
-- **Option A:** select BD/HD from a local folder (batch-friendly)
-- **Option B:** upload BD/HD directly in the dashboard (demo-friendly)
+The hackathon asks for workflows linking bubble patterns to foam stability metrics (coarsening rate, distribution shift, half-life).
 
 ---
 
-### 4) Workflow Overview
+### 3) Inputs and Data Sources
+We operate on **paired spreadsheets**:
+
+- **BD (Bubble Dynamics, XLSX)**: bubble statistics over time (e.g., mean area / variability, count density, etc.).
+- **HD (Foam Stability / Height-Volume, XLSX)**: foam height/volume vs time (e.g., `Vfoam [mL]`) used to estimate **half-life** (time to 50% of initial foam volume).
+
+**Dashboard modes**
+- **Option A (batch friendly)**: pick BD/HD from a local folder.
+- **Option B (demo friendly)**: upload BD/HD directly in Streamlit (run names are sanitized to avoid special-character path issues).
+
+---
+
+### 4) Workflow Overview (Current Implementation)
 **End-to-end flow:**  
-**XLSX datasheets (BD+HD) → synthetic microscopy frames → bubble dynamics → stability forecast (half-life + score) → GO vs NGO comparison**
+**XLSX datasheets (BD+HD) → synthetic microscopy frames → bubble dynamics → graph digital twin → stability forecast (half-life + ML) → GO vs NGO comparison**
 
 #### 4.1 Synthetic microscopy frame generation (from BD)
-When raw microscopy images are unavailable, the pipeline generates microscopy-like frames:
-- bubble radii are sampled from BD-derived distributions (mean area + variability)
-- bubbles are placed with non-overlap constraints
-- frames are rendered with noise/blur to resemble microscopy appearance  
-**Output:** a sequence of `frame_*.png` plus `frames_metadata.csv`
+When raw microscopy images are unavailable, we generate microscopy-like frames:
+- bubble radii are sampled from BD-derived distributions (mean + variability)
+- bubbles placed with non-overlap constraints
+- noise/blur injected to resemble microscopy texture
 
-#### 4.2 Bubble detection and dynamics extraction (OpenCV)
-For each generated frame, we extract explainable features using computer vision:
-- thresholding + morphological operations
-- contour detection and filtering
+**Output (per run):**
+- `frame_*.png`
+- `frames_metadata.csv` (includes time index and stability fields)
+
+#### 4.2 Bubble detection & dynamics extraction (OpenCV)
+For each frame we extract interpretable features:
+- thresholding + morphological ops
+- contour detection + filtering
 - per-frame metrics:
-  - **N(t):** bubble count
-  - **r_mean(t):** mean bubble radius
-  - **r_std(t):** radius variability
-  - **circularity(t):** shape stability indicator  
-**Output:** `bubble_dynamics.csv` and `overlays/` (visual verification of detection)
+  - **N(t)** bubble count
+  - **r_mean(t)** mean radius
+  - **r_std(t)** radius variability
+  - **circularity(t)** shape stability indicator
 
-#### 4.3 Stability metrics (HD + dynamics)
-- **Half-life (observed):** first time `Vfoam` drops below 50% of the initial value, with interpolation when applicable.
-- **Not reached within window:** if the dataset never crosses the 50% threshold, the method reports “not reached within window” (stable during measurement).
-- **Lite stability score:** a fast, explainable stability estimate derived from coarsening trends (e.g., slope of `r_mean(t)`), used for ranking and comparison.
+**Output (per run):**
+- `bubble_dynamics.csv`
+- `overlays/` (visual verification)
 
-#### 4.4 Compare conditions (GO vs NGO / Run A vs Run B)
-The Streamlit dashboard includes a **Compare Two Runs** panel:
-- select Run A and Run B
-- show coarsening rate (Δr/Δt), stability scores
-- show aligned trend plots (N(t), r_mean(t), circularity)
-- auto-label which run appears **more stable** based on the score
+#### 4.3 Half-life estimation (from HD)
+We compute observed half-life as:
+- first time `Vfoam` drops below **50%** of its initial value (linear interpolation when applicable)
+- if the 50% threshold is **not reached**, we report “not reached within window” (stable during measurement) rather than forcing a number
+
+**Output:** half-life is written into metadata and displayed in the dashboard.
+
+#### 4.4 Phase-2: Bubble Neighbor Graph (Digital Twin)
+From detected bubbles at each time step, we build a **neighbor graph**:
+- nodes = bubbles
+- edges = proximity-based neighbors (distance threshold / k-NN style link)
+- compute graph metrics per frame such as:
+  - average degree
+  - density
+  - giant component ratio
+  - simple energy proxy (physics-inspired, based on connectivity + bubble size scale)
+
+**Output (per run):**
+- `graph_metrics.csv`
+- `graph_overlays/` (edges overlaid on frames)
+- optional clip: `graph_overlays.mp4` and/or `graph_overlays.gif`
+
+#### 4.5 AI/ML: Baseline stability predictor (Random Forest)
+To satisfy the AI/ML component **without overclaiming**, we implemented a fast baseline:
+- derive **early-window features** from dynamics + graph metrics (early mean + slope)
+- train a **RandomForest regressor** (scikit-learn) across runs
+- save model artifact: `models/coarsening_rf.joblib`
+- report evaluation (MAE/RMSE/R²) and feature importances for explainability
+
+This gives a practical stability forecast (predictive signal) even when half-life is not observed within the HD window.
 
 ---
 
-### 5) Results and Key Insights
-**What the workflow produces:**
-- A reproducible run folder with:
-  - synthetic frames (`frame_*.png`)
-  - overlays (segmentation/contours for verification)
-  - `bubble_dynamics.csv` with time-series bubble metrics
-  - `frames_metadata.csv` including stability fields
+### 5) Results and Key Insights (What we can show to judges)
+Each run creates a reproducible folder with:
+- synthetic microscopy frames (`frame_*.png`)
+- bubble overlays (`overlays/`)
+- bubble dynamics time series (`bubble_dynamics.csv`)
+- graph digital twin metrics (`graph_metrics.csv`)
+- graph overlays (`graph_overlays/`)
+- optional playable clip (`graph_overlays.mp4` / `graph_overlays.gif`)
+- optional ML forecast (dashboard + model artifact)
 
-**Insights we extract:**
-- **Coarsening behavior:** increasing `r_mean(t)` trends indicate coarsening progression.
-- **Distribution changes:** `r_std(t)` highlights widening/narrowing of size distributions.
-- **Shape stability:** decreasing circularity can indicate deformation/merging events.
-- **Stability interpretation:** combining HD half-life (when observed) with dynamics-based scoring supports fast ranking of conditions.
+**Interpretation highlights**
+- increasing `r_mean(t)` indicates coarsening progression
+- `r_std(t)` captures distribution widening/narrowing
+- circularity trends capture deformation/merging signatures
+- graph metrics (degree / giant component) provide a **digital twin** view of bubble neighborhood evolution
+- ML feature importances provide quick insight into which early signals correlate most with stability outcomes
 
 ---
 
-### 6) Why this approach is hackathon-strong
-- **Works even without microscopy images:** datasheets → frames → measurable dynamics.
-- **Explainable end-to-end:** every plot is backed by detection overlays and transparent computations.
-- **Comparison-ready:** GO vs NGO (or any two conditions) becomes a one-click, judge-friendly decision.
-- **Reusable workflow:** new XLSX pairs instantly produce a new run and can be compared.
+### 6) Demo Experience (Streamlit)
+The dashboard supports:
+- generate runs (Option A or Option B)
+- inspect frames and overlays
+- compare two runs (GO vs NGO / Run A vs Run B)
+- Phase-2: show graph digital twin metrics and overlays
+- one-click utilities (when enabled): generate missing dynamics/graph metrics/clip for selected run
+- ML: show predicted stability signal based on trained baseline model
 
 ---
 
@@ -94,38 +129,34 @@ The Streamlit dashboard includes a **Compare Two Runs** panel:
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+# (Recommended) Install ffmpeg for mp4/gif clip creation
+# macOS:
+brew install ffmpeg
+
 PYTHONPATH=. streamlit run demo/app.py
-````
+```
 
-**Expected outputs per run:**
-
-* `data/synth/<run>/frame_*.png`
-* `data/synth/<run>/overlays/`
-* `data/synth/<run>/bubble_dynamics.csv`
-* `data/synth/<run>/frames_metadata.csv`
+**Optional: Train baseline ML model**
+```bash
+PYTHONPATH=. python src/ml/train_model.py
+```
 
 ---
 
 ### 8) Limitations and Next Steps
+**Current limitations**
+- synthetic frames approximate microscopy; validation with real microscopy is the next step
+- half-life may not be observed in short windows; we report “not reached within window”
+- current ML is a **baseline** (Random Forest) trained on limited runs
 
-**Limitations**
-
-* Synthetic frames approximate microscopy appearance; full validation should include real microscopy frames when available.
-* Half-life may not be observed in some datasets; we report “not reached within window” rather than forcing a prediction.
-
-**Next steps**
-
-* Add richer distribution features (quantiles, skewness) and event markers (merge/split likelihood).
-* Train a supervised model once enough labeled conditions exist (e.g., stability labels/half-life across many formulations).
-* Extend to direct ingestion of real microscopy images when provided.
+**Next (Phase-3 / expansion)**
+- ingest real microscopy frames when available (same downstream pipeline)
+- richer physics-informed features (e.g., energy-based potentials from graph evolution)
+- stronger temporal models (sequence models) once labeled data volume grows
+- automated batch processing across folders and reporting (summary PDF/CSV export)
 
 ---
 
 ### 9) Conclusion
-
-Graph-O-Foam demonstrates a practical, explainable workflow for foam stability analysis in microscopy contexts. By transforming datasheets into frames, extracting interpretable bubble dynamics, and enabling run-to-run comparisons, the project supports rapid formulation screening and clear stability insights aligned with the hackathon’s bubble dynamics and foam stability objectives.
-
-```
-::contentReference[oaicite:0]{index=0}
-```
-
+Graph-O-Foam demonstrates an **explainable**, end-to-end approach for foam/emulsion stability analysis in petroleum liquids. By transforming datasheets into microscopy-like frames, extracting bubble dynamics, building a graph digital twin, and adding an ML baseline forecast, the project provides a judge-friendly workflow for rapid formulation screening and GO vs NGO comparisons.
