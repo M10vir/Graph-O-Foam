@@ -1,14 +1,25 @@
+# env
 .venv/
 venv/
 __pycache__/
 *.pyc
+
+# OS / IDE
 .DS_Store
 .streamlit/
-# raw sheets / outputs
+
+# raw sheets / generated outputs
 data/
-data/**
 *.xlsx
-*.png
+
+# Generated images/videos only inside data (safe even without these lines since data/ is ignored)
+data/**/*.png
+data/**/*.gif
+data/**/*.mp4
+
+# temp / backups
 *.orig
-models/
+
+# ML artifacts (OPTION A: commit model -> comment these out)
+# models/
 data/ml/
